@@ -1,0 +1,109 @@
+{
+    "image": "spritesheet.png",
+    "frame_width": 1539,
+    "frame_height": 866,
+    "pivot": {
+        "x": 769,
+        "y": 866
+    },
+    "frames": [
+        {
+            "name": "human_sprite_1",
+            "x": 0,
+            "y": 0,
+            "w": 1539,
+            "h": 866
+        },
+        {
+            "name": "human_sprite_2",
+            "x": 1539,
+            "y": 0,
+            "w": 1539,
+            "h": 866
+        },
+        {
+            "name": "human_sprite_3",
+            "x": 3078,
+            "y": 0,
+            "w": 1539,
+            "h": 866
+        },
+        {
+            "name": "human_sprite_4",
+            "x": 4617,
+            "y": 0,
+            "w": 1539,
+            "h": 866
+        },
+        {
+            "name": "human_sprite_5",
+            "x": 6156,
+            "y": 0,
+            "w": 1539,
+            "h": 866
+        },
+        {
+            "name": "human_sprite_6",
+            "x": 7695,
+            "y": 0,
+            "w": 1539,
+            "h": 866
+        },
+        {
+            "name": "human_sprite_7",
+            "x": 9234,
+            "y": 0,
+            "w": 1539,
+            "h": 866
+        },
+        {
+            "name": "human_sprite_8",
+            "x": 10773,
+            "y": 0,
+            "w": 1539,
+            "h": 866
+        },
+        {
+            "name": "human_sprite_9",
+            "x": 12312,
+            "y": 0,
+            "w": 1539,
+            "h": 866
+        },
+        {
+            "name": "human_sprite_10",
+            "x": 13851,
+            "y": 0,
+            "w": 1539,
+            "h": 866
+        },
+        {
+            "name": "human_sprite_11",
+            "x": 15390,
+            "y": 0,
+            "w": 1539,
+            "h": 866
+        },
+        {
+            "name": "human_sprite_12",
+            "x": 16929,
+            "y": 0,
+            "w": 1539,
+            "h": 866
+        },
+        {
+            "name": "human_sprite_13",
+            "x": 18468,
+            "y": 0,
+            "w": 1539,
+            "h": 866
+        },
+        {
+            "name": "human_sprite_14",
+            "x": 20007,
+            "y": 0,
+            "w": 1539,
+            "h": 866
+        }
+    ]
+}
