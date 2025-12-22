@@ -14,47 +14,88 @@ class Dino:
         # State
         self.is_jumping = False
         self.is_crouching = False
-        self.jump_t = 0.0 # 0 to 1
+        self.vel_y = 0.0
+        
+        # Coachwalk Animation State
+        self.crouch_timer = 0.0
+        self.crouch_frame_index = 0
+        self.crouch_fps = 12 # 12 FPS target
         
         self.rect = pygame.Rect(self.x, self.y, self.width, self.height)
         
     def jump(self):
-        if not self.is_jumping and not self.is_crouching:
+        if not self.is_jumping:
             self.is_jumping = True
-            self.jump_t = 0.0
+            self.vel_y = -13.5 # Initial jump velocity
+            # If crouching, reset height
+            if self.is_crouching:
+                self.stop_crouch()
 
     def crouch(self):
+        self.is_crouching = True
+        self.height = CROUCH_HEIGHT
+        # If in air, just flags crouching state. 
+        # If we were on ground, adjust Y to sticky bottom? 
+        # Actually easier to just change hitbox height.
         if not self.is_jumping:
-            self.is_crouching = True
-            self.height = CROUCH_HEIGHT
             self.y = self.ground_y - self.height
-        elif self.is_jumping:
-            # Interrupt jump
-            self.is_jumping = False
-            self.jump_t = 0.0
-            self.y = self.ground_y - self.height
+        else:
+            # Fast Fall
+            self.vel_y += 2.0 # Push down
 
     def stop_crouch(self):
         self.is_crouching = False
         self.height = PLAYER_HEIGHT
-        self.y = self.ground_y - self.height
+        # If on ground, adjust Y up
+        if not self.is_jumping:
+            self.y = self.ground_y - self.height
 
-    def update(self):
-        if self.is_jumping:
-            # Quadratic jump: height = 4 * jump_h * t * (1 - t)
-            self.jump_t += 1.0 / JUMP_DURATION
-            if self.jump_t >= 1.0:
+    def update(self, target_ground_y=GROUND_Y):
+        # Apply Gravity
+        self.vel_y += GRAVITY
+        self.y += self.vel_y
+        
+        hit_ground = False
+        
+        # Ground Collision
+        if self.y + self.height >= target_ground_y:
+            # Check if we were falling (vy > 0)
+            if self.vel_y > 0:
+                self.y = target_ground_y - self.height
+                self.vel_y = 0.0
                 self.is_jumping = False
-                self.jump_t = 0.0
-                self.y = self.ground_y - self.height
-            else:
-                h = 4 * JUMP_HEIGHT * self.jump_t * (1 - self.jump_t)
-                self.y = (self.ground_y - self.height) - h
+                self.ground_y = target_ground_y
+                hit_ground = True
+        
+        # If we are seemingly on ground but target_ground_y dropped (e.g. walked off platform)
+        # Gravity above will naturally pull us down next frame
+        if not hit_ground and self.y + self.height < target_ground_y:
+            self.is_jumping = True # We are in air
         
         # Hitbox (inset)
         padding_x = 10
         padding_y = 5
         self.rect = pygame.Rect(self.x + padding_x, self.y + padding_y, self.width - 2*padding_x, self.height - 2*padding_y)
+
+    def update_animation(self, dt):
+        """
+        Updates animation state based on real-time dt (seconds).
+        """
+        if self.is_crouching:
+            self.crouch_timer += dt
+            frame_duration = 1.0 / self.crouch_fps
+            
+            while self.crouch_timer >= frame_duration:
+                self.crouch_timer -= frame_duration
+                self.crouch_frame_index += 1
+                # Loop handled in draw or by limiting index max later?
+                # Better to keep it unbounded here or modulo if we know length.
+                # But we don't know asset length HERE. 
+                # So we just increment. The draw function will modulo it.
+        else:
+            # Reset
+            self.crouch_timer = 0.0
+            self.crouch_frame_index = 0
 
     def draw(self, screen, assets=None, frame_count=0):
         # Determine sprite
@@ -88,8 +129,20 @@ class Dino:
         
         # New Animation System Priority
         elif assets and "human_anim" in assets:
-            anim = assets["human_anim"]
-            frame = anim.get_current_frame()
+            
+            # Decide on frame based on state
+            frame = None
+            
+            if self.is_crouching and "coachwalk" in assets and assets["coachwalk"]:
+                frames = assets["coachwalk"]
+                # Modulo index to loop
+                idx = self.crouch_frame_index % len(frames)
+                frame = frames[idx]
+            else:
+                # Default Idle/Run
+                anim = assets["human_anim"]
+                frame = anim.get_current_frame()
+            
             if frame:
                 # Align bottom-center of sprite to bottom-center of hitbox
                 # Sprite X: center of hitbox - half sprite width

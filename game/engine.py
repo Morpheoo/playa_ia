@@ -3,7 +3,7 @@ import pygame
 import random
 from config import *
 from .dino import Dino
-from .obstacle import Cactus, Bird
+from .obstacle import CarObstacle, Drone, ConeObstacle, BeachBall, CoolerObstacle, DumbbellObstacle, SurfboardObstacle, DumbbellBoxObstacle
 
 class Engine:
     def __init__(self):
@@ -44,18 +44,70 @@ class Engine:
             self.spawn_timer = 0
             self.next_spawn_dist = random.randint(MIN_SPAWN_DIST, MAX_SPAWN_DIST)
             
-            if random.random() < BIRD_PROBABILITY:
-                self.obstacles.append(Bird(SCREEN_WIDTH))
+            r = random.random()
+            # Probability Distribution (Total 1.0)
+            # Birds/Drones: ~10% (BIRD_PROBABILITY)
+            # Cars: Remaining (Default)
+            
+            if r < BIRD_PROBABILITY:
+                self.obstacles.append(Drone(SCREEN_WIDTH))
+            elif r < BIRD_PROBABILITY + 0.15: # 15% Cone
+                self.obstacles.append(ConeObstacle(SCREEN_WIDTH))
+            elif r < BIRD_PROBABILITY + 0.30: # 15% Beach Ball
+                self.obstacles.append(BeachBall(SCREEN_WIDTH))
+            elif r < BIRD_PROBABILITY + 0.45: # 15% Cooler
+                self.obstacles.append(CoolerObstacle(SCREEN_WIDTH))
+            elif r < BIRD_PROBABILITY + 0.60: # 15% Dumbbell (New)
+                self.obstacles.append(DumbbellObstacle(SCREEN_WIDTH))
+            elif r < BIRD_PROBABILITY + 0.70: # 10% Surfboard (New, Rare)
+                self.obstacles.append(SurfboardObstacle(SCREEN_WIDTH))
+            elif r < BIRD_PROBABILITY + 0.85: # 15% Dumbbell Box (New)
+                self.obstacles.append(DumbbellBoxObstacle(SCREEN_WIDTH))
             else:
-                self.obstacles.append(Cactus(SCREEN_WIDTH))
+                self.obstacles.append(CarObstacle(SCREEN_WIDTH))
 
         alive_dinos = 0
         for dino in self.dinos:
             if not hasattr(dino, "dead"): dino.dead = False
             if dino.dead: continue
             
-            dino.update()
+            target_ground = GROUND_Y
             
+            # Check for Platform Collision (Car Roof)
+            for obs in self.obstacles:
+                if isinstance(obs, CarObstacle):
+                    # Check horizontal overlap
+                    # Dino is fixed at PLAYER_X to PLAYER_X + WIDTH
+                    # Obs is moving.
+                    dino_right = dino.x + dino.width
+                    
+                    # FIX: Use Hitbox (rect) boundaries for platform width, not sprite width.
+                    # This ensures platform matches the deadly zone width exactly.
+                    obs_left_hitbox = obs.rect.x
+                    obs_right_hitbox = obs.rect.x + obs.rect.width
+                    
+                    if (dino.x < obs_right_hitbox and dino_right > obs_left_hitbox):
+                        # Horizontal overlap. Now check if vertical position allows "landing"
+                        # We land if we are above the deadly part?
+                        # Actually, we land if we are roughly at or above the roof level.
+                        # Roof level is determined by safe_top_pct logic in CarObstacle.
+                        # update: hitbox_top_offset = height * 0.6
+                        # so roof y = obs.y + (height * 0.6)
+                        
+                        # We land if we are roughly at or above the roof level.
+                        # Roof level is determined by safe_top_pct logic in CarObstacle.
+                        # Now exposed as obs.roof_offset
+
+                        roof_offset = getattr(obs, 'roof_offset', 0)
+                        roof_y = obs.y + roof_offset
+                        
+                        # If dino bottom is close to roof_y or above it, snap to it?
+                        # Let's say if dino.y + dino.height <= roof_y + 30 (tolerance)
+                        # We use a slightly generous tolerance so you don't fall through if you are just skimming the edge
+                        if (dino.y + dino.height) <= (roof_y + 30):
+                             target_ground = roof_y
+            
+            dino.update(target_ground)
             for obs in self.obstacles:
                 if dino.rect.colliderect(obs.rect):
                     dino.dead = True
@@ -81,7 +133,7 @@ class Engine:
             "distance": self.distance_traveled
         }
 
-    def draw(self, screen, assets=None):
+    def draw(self, screen, assets=None, debug_mode=False):
         if assets and "backgrounds" in assets:
             backgrounds = assets["backgrounds"]
             # Cycling logic
@@ -160,3 +212,22 @@ class Engine:
         for dino in self.dinos:
             if not getattr(dino, "dead", False):
                 dino.draw(screen, assets, frame_count)
+
+        # DEBUG: Hitboxes
+        if debug_mode:
+            for obs in self.obstacles:
+                # Red for obstacles
+                pygame.draw.rect(screen, (255, 0, 0), obs.rect, 2)
+                
+                if isinstance(obs, CarObstacle):
+                    # Blue for Safe Roof
+                    # Draw a line or rect showing where the platform is
+                    roof_y = obs.y + getattr(obs, 'roof_offset', 0)
+                    start_x = obs.rect.x
+                    end_x = obs.rect.x + obs.rect.width
+                    pygame.draw.line(screen, (0, 0, 255), (start_x, roof_y), (end_x, roof_y), 3)
+            
+            for dino in self.dinos:
+                if not getattr(dino, "dead", False):
+                    # Green for dino
+                    pygame.draw.rect(screen, (0, 255, 0), dino.rect, 2)

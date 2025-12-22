@@ -128,9 +128,9 @@ class AssetManager:
             num_frames = len(loader.frames_data)
             for i in range(num_frames):
                 raw_frame = loader.get_frame(i)
-                # Scale down by 0.09 to fit game world (~11x23)
-                w = int(raw_frame.get_width() * 0.09)
-                h = int(raw_frame.get_height() * 0.09)
+                # Scale down by 0.10 to fit game world (~53px height)
+                w = int(raw_frame.get_width() * 0.10)
+                h = int(raw_frame.get_height() * 0.10)
                 scaled_frame = pygame.transform.scale(raw_frame, (w, h))
                 frames.append(scaled_frame)
                 
@@ -139,3 +139,49 @@ class AssetManager:
         except Exception as e:
             print(f"Error creating human animation: {e}")
             return None
+
+    @staticmethod
+    def load_coachwalk_animation(assets_dir):
+        """
+        Loads the coachwalk (crouch) animation frames.
+        Returns a list of scaled pygame.Surfaces.
+        """
+        coachwalk_dir = os.path.join(assets_dir, "player", "coachwalk")
+        if not os.path.exists(coachwalk_dir):
+            print(f"Coachwalk assets not found in {coachwalk_dir}")
+            return []
+
+        frames = []
+        try:
+            # List all png files
+            files = [f for f in os.listdir(coachwalk_dir) if f.endswith(".png")]
+            
+            # Sort files. Naming convention: coachwalk_1-Photoroom.png
+            # Extract number from filename to sort correctly
+            def extract_number(filename):
+                # Try to find the first number in the string
+                import re
+                match = re.search(r'\d+', filename)
+                return int(match.group()) if match else 0
+            
+            files.sort(key=extract_number)
+            
+            for filename in files:
+                path = os.path.join(coachwalk_dir, filename)
+                img = AssetManager.load_image(path)
+                if img:
+                    # Fix: Standardize height to avoid "jitter" or growing/shrinking
+                    # Target height: ~43px (Visual size, slightly larger than 34px hitbox)
+                    target_h = 55
+                    
+                    # Calculate width to preserve aspect ratio
+                    aspect_ratio = img.get_width() / img.get_height()
+                    target_w = int(target_h * aspect_ratio)
+                    
+                    scaled_frame = pygame.transform.scale(img, (target_w, target_h))
+                    frames.append(scaled_frame)
+            
+            return frames
+        except Exception as e:
+            print(f"Error loading coachwalk animation: {e}")
+            return []

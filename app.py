@@ -24,6 +24,12 @@ from ai.genetic_algo import GeneticAlgorithm
 from ai.brain import NeuralNetwork
 from config import *
 
+# Optional: Keyboard for manual play
+try:
+    import keyboard
+except ImportError:
+    keyboard = None
+
 # Set page config
 st.set_page_config(page_title="AI Runner Evolution", layout="wide")
 
@@ -40,7 +46,11 @@ if 'engine' not in st.session_state:
     st.session_state.frame_count = 0
     st.session_state.assets = {} # Store pygame surfaces
 
-    # Load default assets from disk
+    st.session_state.assets = {} # Store pygame surfaces
+
+# Load default assets from disk (Ensure this runs if assets are empty)
+if 'assets' not in st.session_state or not st.session_state.assets:
+    st.session_state.assets = {}
     assets_dir = os.path.join(os.getcwd(), "assets")
     if os.path.exists(assets_dir):
         # 1. Load SpriteSheets
@@ -64,14 +74,29 @@ if 'engine' not in st.session_state:
         if bg_surfs:
             st.session_state.assets["backgrounds"] = bg_surfs
 
+        # 1.7 Load Coachwalk Animation
+        coachwalk_frames = AssetManager.load_coachwalk_animation(assets_dir)
+        if coachwalk_frames:
+             st.session_state.assets["coachwalk"] = coachwalk_frames
+
         # 2. Load Static Images
         asset_files = {
             "dino": "dino.png",
             # "dino_run1": "dino_run1.png", # Deprecated if spritesheet exists
             # "dino_run2": "dino_run2.png", 
             "dino_jump": "dino_jump.png",
-            "cactus": "cactus.png",
-            "bird": "bird.png",
+            "car_0": "car_0.png",
+            "car_1": "car_1.png",
+            "car_2": "car_2.png",
+            "car_3": "car_3.png",
+            "car_4": "car_4.png",
+            "dron": "dron.png",
+            "cone": "cone.png",
+            "beach_ball": "beach_ball.png",
+            "cooler": "cooler.png",
+            "dumbbell": "dumbbell.png",
+            "surfboard": "surfboard.png",
+            "dumbbell_box": "dumbbell_box.png",
             "ground": "ground.png"
         }
         
@@ -100,6 +125,13 @@ bird_prob = st.sidebar.slider("Probabilidad de Pájaros", 0.0, 0.5, BIRD_PROBABI
 st.sidebar.header("Simulación")
 sim_speed = st.sidebar.select_slider("Velocidad de Simulación", options=[1, 2, 4, 8, 16], value=1)
 
+st.sidebar.markdown("---")
+manual_mode = st.sidebar.checkbox("🎮 Modo Manual (@Jared Play)", value=False)
+debug_mode = st.sidebar.checkbox("🟥 Mostrar Hitboxes", value=False)
+
+if manual_mode and keyboard is None:
+    st.sidebar.error("Librería 'keyboard' no instalada. Ejecuta: pip install keyboard")
+
 # Manual uploaders removed as per user request. Assets are loaded from assets/ directory.
 
 # Update parameters in GA
@@ -108,10 +140,19 @@ st.session_state.ga.set_params(pop_size, mutation_rate, selection_ratio, elitism
 # Controls
 col1, col2, col3, col4 = st.columns(4)
 with col1:
-    if st.button("Start / Resume"):
+    if st.button("Start / Resume", key="start_btn"):
         st.session_state.running = True
-        if st.session_state.generation_complete or len(st.session_state.engine.dinos) == 0:
-            # Start new generation
+        
+        # Enforce Manual Mode Setup
+        if manual_mode:
+            # If we are in manual mode but have wrong number of dinos or just switching
+            if len(st.session_state.engine.dinos) != 1:
+                st.session_state.engine.reset(num_dinos=1)
+                st.session_state.networks = []
+                st.session_state.generation_complete = False
+        
+        elif st.session_state.generation_complete or len(st.session_state.engine.dinos) == 0:
+            # Start new generation (AI Mode)
             genomes = st.session_state.ga.population
             st.session_state.engine.reset(num_dinos=len(genomes))
             st.session_state.networks = [NeuralNetwork(g) for g in genomes]
@@ -169,6 +210,8 @@ if st.session_state.running:
     surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
     
     while st.session_state.running:
+        frame_start_time = time.time()
+
         
         # Simulation Loop
         for _ in range(sim_speed):
@@ -179,34 +222,72 @@ if st.session_state.running:
             obs = state["next_obstacle"]
             
             # 2. AI Decision for each dino
-            if st.session_state.networks and len(st.session_state.networks) == len(st.session_state.engine.dinos):
-                inputs = np.zeros(7)
-                if obs:
-                    inputs[0] = (obs.x - PLAYER_X) / SCREEN_WIDTH
-                    inputs[1] = obs.x / SCREEN_WIDTH
-                    inputs[2] = obs.y / SCREEN_HEIGHT
-                    inputs[3] = obs.width / 100
-                    inputs[4] = obs.height / 100
-                else:
-                    inputs[0] = 1.0 
-                    inputs[1] = 1.0
-                    inputs[2] = 1.0
-                    inputs[3] = 0.0
-                    inputs[4] = 0.0
+            if manual_mode and keyboard:
+                 # MANUAL CONTROL
+                 for dino in st.session_state.engine.dinos:
+                     if getattr(dino, "dead", False): continue
+                     
+                     if keyboard.is_pressed('up') or keyboard.is_pressed('space') or keyboard.is_pressed('w'):
+                         dino.jump()
+                     
+                     if keyboard.is_pressed('down') or keyboard.is_pressed('s'):
+                         dino.crouch()
+                     else:
+                         dino.stop_crouch()
+                         
+            elif st.session_state.networks and len(st.session_state.networks) == len(st.session_state.engine.dinos):
+                # 2. Strict Input Definition (6 Normalized Features)
+                # DistanceX_norm, ObsY_norm, ObsW_norm, ObsH_norm, PlayerY_norm, Speed_norm
                 
-                inputs[6] = state["speed"] / 10.0
+                # Get next obstacle data
+                dist_x = 0
+                obs_y = 0
+                obs_w = 0
+                obs_h = 0
+                
+                if obs:
+                    # distanceX = (ox - (px + pw))
+                    # We assume dino is at PLAYER_X. ox is obs.x (left edge).
+                    # Dino width is PLAYER_WIDTH (approx).
+                    dist_raw = obs.x - (PLAYER_X + PLAYER_WIDTH)
+                    dist_x = max(0, dist_raw)
+                    obs_y = obs.y
+                    obs_w = obs.width
+                    obs_h = obs.height
+                else:
+                    # Null obstacle
+                    dist_x = WORLD_W # Max distance
+                    obs_y = 0
+                    obs_w = 0
+                    obs_h = 0
+
+                # Normalize [0, 1]
+                inputs = np.zeros(INPUT_SIZE) # Size 6
+                inputs[0] = np.clip(dist_x / WORLD_W, 0, 1) # DistX
+                inputs[1] = np.clip(obs_y / WORLD_H, 0, 1)  # ObsY
+                inputs[2] = np.clip(obs_w / WORLD_W, 0, 1)  # ObsW
+                inputs[3] = np.clip(obs_h / WORLD_H, 0, 1)  # ObsH
+                
+                # PlayerY and Speed are per dino / global
+                norm_speed = np.clip((state["speed"] - SPEED_MIN) / (SPEED_MAX - SPEED_MIN), 0, 1)
+                inputs[5] = norm_speed # Speed is idx 5
                 
                 for i, dino in enumerate(st.session_state.engine.dinos):
                     if getattr(dino, "dead", False): continue
                     
-                    inputs[5] = dino.y / SCREEN_HEIGHT
+                    inputs[4] = np.clip(dino.y / WORLD_H, 0, 1) # PlayerY is idx 4
                     
-                    # Activate NN
-                    up_out, down_out = st.session_state.networks[i].activate(inputs)
+                    # Activate NN (Returns [p_jump, p_crouch])
+                    preds = st.session_state.networks[i].activate(inputs)
                     
-                    if up_out > 0.5:
+                    # 3. Multi-label Decision Logic
+                    jump = preds[0] > JUMP_THRESHOLD
+                    crouch = preds[1] > CROUCH_THRESHOLD
+                    
+                    if jump:
                         dino.jump()
-                    elif down_out > 0.5:
+                    
+                    if crouch:
                         dino.crouch()
                     else:
                         dino.stop_crouch()
@@ -230,9 +311,16 @@ if st.session_state.running:
              if anim_dt > 0.1: anim_dt = 0.1
              
              st.session_state.assets["human_anim"].update(anim_dt)
+             
+             # Also update per-dino animations (coachwalk)
+             for dino in st.session_state.engine.dinos:
+                 if not getattr(dino, "dead", False):
+                     # We can add a method to dino to handle its own animation state
+                     if hasattr(dino, "update_animation"):
+                        dino.update_animation(anim_dt)
         
         # 4. Render
-        st.session_state.engine.draw(surface, st.session_state.assets)
+        st.session_state.engine.draw(surface, st.session_state.assets, debug_mode)
         
         # Convert pygame surface to image
         img_data = pygame.surfarray.array3d(surface)
@@ -241,52 +329,127 @@ if st.session_state.running:
         
         # Update UI
         # Use numpy array directly for speed and avoid PIL overhead
-        game_placeholder.image(img_data, channels="RGB", output_format="JPEG", width="stretch")
+        try:
+            game_placeholder.image(img_data, channels="RGB", output_format="JPEG", width="stretch")
+        except Exception:
+            pass
         
         # Stats
         alive_count = sum(1 for d in st.session_state.engine.dinos if not getattr(d, "dead", False))
         gen_text.metric("Generación", st.session_state.ga.generation)
         alive_text.metric("Agentes Vivos", alive_count)
         nn_count_text.metric("Redes Neuronales Activas", len(st.session_state.networks))
-        best_text.metric("Mejor Histórico", f"{int(st.session_state.ga.best_fitness)}")
+        # Use Global Best for "Mejor Histórico"
+        best_text.metric("Mejor Histórico", f"{int(st.session_state.ga.global_best_fitness)}")
         curr_fit_text.metric("Fitness Actual", f"{int(st.session_state.engine.distance_traveled)}")
         
         # Check Gen Completion
         if st.session_state.engine.game_over:
-            # Evolve
-            fitnesses = [d.fitness for d in st.session_state.engine.dinos]
-            st.session_state.ga.next_generation(fitnesses)
-            
-            # Plot progress
-            if st.session_state.ga.history:
-                df = pd.DataFrame(st.session_state.ga.history)
-                chart_placeholder.line_chart(df.set_index("gen"))
-            
-            # Reset engine for next gen
-            genomes = st.session_state.ga.population
-            st.session_state.engine.reset(num_dinos=len(genomes))
-            st.session_state.networks = [NeuralNetwork(g) for g in genomes]
-            
-            # Optional: Update Graph
-            best_genome = st.session_state.ga.population[0]
-            
-            fig, ax = plt.subplots(figsize=(6, 4))
-            G = nx.DiGraph()
-            for g in best_genome.genes:
-                G.add_edge(g.source, g.target, weight=g.weight)
-            
-            pos = {}
-            for i in range(7): pos[i] = (0, i)
-            for i in range(7, 14): pos[i] = (1, i-7)
-            for i in range(14, 16): pos[i] = (2, (i-14)*3 + 2)
-            
-            nx.draw(G, pos, ax=ax, with_labels=True, node_color='skyblue', edge_color='gray', node_size=500, font_size=8)
-            graph_placeholder.pyplot(fig)
-            plt.close(fig)
+            if manual_mode:
+                # Just reset for another run
+                st.session_state.engine.reset(num_dinos=1)
+                st.session_state.networks = []
+                time.sleep(1)
+            else:
+                # Evolve (AI Mode)
+                fitnesses = [d.fitness for d in st.session_state.engine.dinos]
+                st.session_state.ga.next_generation(fitnesses)
+                
+                # Plot progress
+                if st.session_state.ga.history:
+                    df = pd.DataFrame(st.session_state.ga.history)
+                    chart_placeholder.line_chart(df.set_index("gen"))
+                
+                # Reset engine for next gen
+                genomes = st.session_state.ga.population
+                st.session_state.engine.reset(num_dinos=len(genomes))
+                st.session_state.networks = [NeuralNetwork(g) for g in genomes]
+                
+                # Optional: Update Graph
+                best_genome = st.session_state.ga.population[0]
+                
+                # Optional: Update Graph (Layered MLP Visualization)
+                best_genome = st.session_state.ga.population[0]
+                
+                fig = plt.figure(figsize=(8, 6))
+                ax = fig.add_subplot(111)
+                ax.axis('off')
+                
+                # Layout Config
+                layer_sizes = [INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE]
+                layer_names = ["Input", "Hidden", "Output"]
+                node_labels = [
+                    ["DistX", "ObsY", "ObsW", "ObsH", "PlyY", "Spd"],
+                    ["H1", "H2", "H3", "H4", "H5"],
+                    ["Jump", "Crouch"]
+                ]
+                
+                v_spacing = 1.0 / max(layer_sizes)
+                h_spacing = 0.8
+                
+                # Node Positions
+                # Dict: (layer_idx, node_idx) -> (x, y)
+                positions = {}
+                for l in range(len(layer_sizes)):
+                    n = layer_sizes[l]
+                    x = l * h_spacing
+                    for i in range(n):
+                        # Center vertically
+                        y = 0.5 + (n - 1) * v_spacing / 2.0 - i * v_spacing
+                        positions[(l, i)] = (x, y)
+                        
+                        # Draw Node
+                        circle = plt.Circle((x, y), 0.04, color='skyblue', ec='black', zorder=4)
+                        ax.add_patch(circle)
+                        # Label
+                        lbl = node_labels[l][i] if i < len(node_labels[l]) else ""
+                        ax.text(x - 0.08 if l==0 else x + 0.08 if l==2 else x, y + 0.06, lbl, 
+                                ha='center', fontsize=8, zorder=5)
 
-            time.sleep(1)
+                # Draw Connections strictly (Fully Connected)
+                # Input -> Hidden (W1)
+                w1 = best_genome.w1 #(Hidden, Input)
+                max_w = np.max(np.abs(w1)) if w1.size > 0 else 1.0
+                
+                for i in range(INPUT_SIZE):
+                    for h in range(HIDDEN_SIZE):
+                        weight = w1[h, i]
+                        # Alpha/Thickness based on magnitude
+                        alpha = min(1.0, abs(weight) / max_w)
+                        color = 'red' if weight < 0 else 'green'
+                        linewidth = 0.5 + 2 * (abs(weight) / max_w)
+                        
+                        p1 = positions[(0, i)]
+                        p2 = positions[(1, h)]
+                        ax.plot([p1[0], p2[0]], [p1[1], p2[1]], color=color, alpha=alpha, linewidth=linewidth, zorder=1)
+
+                # Hidden -> Output (W2)
+                w2 = best_genome.w2 # (Output, Hidden)
+                # We can re-calc max_w or use same scale. Let's re-calc strict per layer or global?
+                # Per layer is fine.
+                max_w2 = np.max(np.abs(w2)) if w2.size > 0 else 1.0
+                
+                for h in range(HIDDEN_SIZE):
+                    for o in range(OUTPUT_SIZE):
+                        weight = w2[o, h]
+                        alpha = min(1.0, abs(weight) / max_w2)
+                        color = 'red' if weight < 0 else 'green'
+                        linewidth = 0.5 + 2 * (abs(weight) / max_w2)
+                        
+                        p1 = positions[(1, h)]
+                        p2 = positions[(2, o)]
+                        ax.plot([p1[0], p2[0]], [p1[1], p2[1]], color=color, alpha=alpha, linewidth=linewidth, zorder=1)
+
+                graph_placeholder.pyplot(fig)
+                plt.close(fig)
+    
+                time.sleep(1)
         
-        time.sleep(0.01)
+        # Cap FPS to 30 to avoid overloading Streamlit media storage
+        elapsed_frame = time.time() - frame_start_time
+        target_frame_time = 1.0 / 30.0
+        if elapsed_frame < target_frame_time:
+            time.sleep(target_frame_time - elapsed_frame)
         
 else:
     game_placeholder.info("Presiona 'Start' para iniciar la evolución.")
