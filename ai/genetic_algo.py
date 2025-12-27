@@ -53,8 +53,8 @@ class GeneticAlgorithm:
             new_population.append(copy.deepcopy(results[current_elite_idx][0]))
             current_elite_idx += 1
             
-        pool_size = int(self.population_size * self.selection_ratio)
-        pool = [results[i][0] for i in range(max(1, pool_size))]
+        num_to_select = max(1, int(len(results) * self.selection_ratio))
+        pool = [r[0] for r in results[:num_to_select]]
         
         while len(new_population) < self.population_size:
             parent1 = random.choice(pool)
