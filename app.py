@@ -131,6 +131,26 @@ st.sidebar.markdown("---")
 manual_mode = st.sidebar.checkbox("🎮 Modo Manual (@Jared Play)", value=False)
 debug_mode = st.sidebar.checkbox("🟥 Mostrar Hitboxes", value=False)
 
+st.sidebar.markdown("---")
+st.sidebar.header("🧬 Estrategia de Evolución")
+strategy_labels = {
+    "Histórico (HoF)": "HOF",
+    "Solo Última Gen": "GEN",
+    "Adaptativa (Dynamic)": "DYNAMIC"
+}
+selected_label = st.sidebar.selectbox(
+    "Método de Selección", 
+    options=list(strategy_labels.keys()),
+    help="HoF: Mantiene al mejor de siempre. GEN: Solo usa los mejores de la ronda actual. DYNAMIC: Aumenta la mutación si se bloquea."
+)
+st.session_state.ga.strategy = strategy_labels[selected_label]
+
+# Status display in sidebar
+if st.session_state.ga.stagnation_counter > 5:
+    st.sidebar.warning(f"⚠️ Estancamiento detectado ({st.session_state.ga.stagnation_counter} rds)")
+    if st.session_state.ga.strategy == "DYNAMIC":
+         st.sidebar.info("🚀 Aplicando mutación aumentada y sangre nueva...")
+
 if manual_mode and keyboard is None:
     st.sidebar.error("Librería 'keyboard' no instalada. Ejecuta: pip install keyboard")
 

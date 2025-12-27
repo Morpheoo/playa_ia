@@ -19,6 +19,10 @@ class GeneticAlgorithm:
         self.history = []
         self.global_best_genome = None
         self.global_best_fitness = 0
+        
+        # New learning strategies
+        self.strategy = "HOF" # Default
+        self.stagnation_counter = 0
 
     def next_generation(self, fitnesses):
         results = list(zip(self.population, fitnesses))
@@ -27,41 +31,58 @@ class GeneticAlgorithm:
         current_best_fitness = results[0][1]
         current_best_genome = results[0][0]
         
+        # Track Stagnation (Is it better than personal best history?)
+        if current_best_fitness <= self.global_best_fitness:
+            self.stagnation_counter += 1
+        else:
+            self.stagnation_counter = 0
+            self.global_best_fitness = current_best_fitness
+            self.global_best_genome = copy.deepcopy(current_best_genome)
+            
         self.best_fitness = current_best_fitness
         self.avg_fitness = sum(fitnesses) / len(fitnesses)
         self.history.append({"gen": self.generation, "best": self.best_fitness, "avg": self.avg_fitness})
         
-        # Check for Hall of Fame (Global Best)
-        if current_best_fitness > self.global_best_fitness:
-            self.global_best_fitness = current_best_fitness
-            self.global_best_genome = copy.deepcopy(current_best_genome)
-        
         new_population = []
         
-        # 1. Hall of Fame injection: Ensure the All-Time Best is always in the population
-        if self.global_best_genome:
-            new_population.append(copy.deepcopy(self.global_best_genome))
-            
-        # 2. Standard Elitism (fill remaining slots up to elitism_count)
-        # If we added global best, we take 1 less from current results (unless global best IS current best)
-        # To be safe, just fill inputs until we hit elitism_count
+        # Adaptive Mutation Boost for DYNAMIC mode
+        eff_mutation = self.mutation_rate
+        if self.strategy == "DYNAMIC" and self.stagnation_counter > 10:
+             # Increase mutation if stuck to explore more
+             eff_mutation = min(0.5, self.mutation_rate + 0.2)
         
+        # 1. Selection & Elite Migration
+        if self.strategy == "HOF":
+             # Always keep history best
+             if self.global_best_genome:
+                 new_population.append(copy.deepcopy(self.global_best_genome))
+        elif self.strategy == "DYNAMIC" and self.stagnation_counter < 15:
+             # In dynamic, keep HOF unless we are deeply stuck
+             if self.global_best_genome:
+                 new_population.append(copy.deepcopy(self.global_best_genome))
+        # "GEN" strategy doesn't inject global best, forces current progress only
+            
+        # 2. Fill Elites from current results
         current_elite_idx = 0
         while len(new_population) < self.elitism_count and current_elite_idx < len(results):
-            # Avoid duplicate if global best is same as current best? 
-            # It's fine to have duplicates (higher weight for good genes).
             new_population.append(copy.deepcopy(results[current_elite_idx][0]))
             current_elite_idx += 1
             
+        # 3. Fill the rest of the population
         num_to_select = max(1, int(len(results) * self.selection_ratio))
         pool = [r[0] for r in results[:num_to_select]]
         
         while len(new_population) < self.population_size:
+            # Random "Immigration" to break local minima in DYNAMIC mode
+            if self.strategy == "DYNAMIC" and self.stagnation_counter > 15 and random.random() < 0.15:
+                 new_population.append(Genome())
+                 continue
+
             parent1 = random.choice(pool)
             parent2 = random.choice(pool)
             
             child = self.crossover(parent1, parent2)
-            child.mutate(self.mutation_rate)
+            child.mutate(eff_mutation)
             new_population.append(child)
             
         self.population = new_population
