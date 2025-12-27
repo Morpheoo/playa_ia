@@ -42,6 +42,10 @@ class Obstacle:
             img_key = "dumbbell_box"
         elif "dumbbell" in self.type_name:
             img_key = "dumbbell"
+        elif "beach_net" in self.type_name:
+            img_key = "beach_net"
+        elif "bar_crouch" in self.type_name:
+            img_key = "bar_crouch"
         elif "surfboard" in self.type_name:
             img_key = "surfboard"
         elif "dron" in self.type_name:
@@ -59,7 +63,7 @@ class CarObstacle(Obstacle):
         variant = random.randint(0, 4)
         # Dimensions for cars based on player size
         # Formula: Double the previous size (1.8 -> 3.6)
-        height = int(PLAYER_HEIGHT * 0.95 * 3.6)
+        height = int(PLAYER_HEIGHT * 0.55 * 3.6)
         width = int(height * 1.5) # Widened from 1.2
         type_name = f"car_{variant}"
             
@@ -161,104 +165,218 @@ class ConeObstacle(Obstacle):
 class BeachBall(Obstacle):
     def __init__(self, x):
         # Increased size as requested (60 -> 70)
-        width = 70
+        width = 100
         height = 70
         type_name = "beach_ball"
         super().__init__(x, width, height, type_name)
         
         # STRICT Ground Alignment + sink 10px
         # Lowered 10px to avoid floating
-        self.y = GROUND_Y - self.height + 18
+        self.y = GROUND_Y - self.height + 20
         
-        # Hitbox: Padded to match contour (removed empty corners)
-        padding = 19
-        self.rect = pygame.Rect(self.x + padding, self.y + padding, self.width - 2*padding, self.height - padding)
+       # Padded hitbox: Narrower and shorter (very low profile)
+        # Horizontal: 10px each side -> 50px width
+        # Top: 45px padding -> 25px height (stops at ground)
+        self.padding_x = 30
+        self.padding_top = 15
         
+        hitbox_y = self.y + self.padding_top
+        hitbox_height = GROUND_Y - hitbox_y
+        
+        self.rect = pygame.Rect(self.x + self.padding_x, hitbox_y, 
+                               self.width - 2*self.padding_x, hitbox_height)
+
     def update(self, speed):
         self.x -= speed
-        if self.x < -self.width:
-            self.removed = True
-            
-        padding = 19
-        self.rect.x = int(self.x + padding)
-        # rect.y stays constant at self.y + padding
+        if self.x < -self.width: self.removed = True
+        
+        # Sync hitbox
+        self.rect.x = int(self.x + self.padding_x)
 
 class CoolerObstacle(Obstacle):
     def __init__(self, x):
         # Cooler dimensions (Medium-Small, Boxy)
-        width = 60
-        height = 50
+        # Resized: 60x50 -> 80x70
+        width = 100
+        height = 70
         type_name = "cooler"
         super().__init__(x, width, height, type_name)
         
-        # Grounded
-        self.y = GROUND_Y - self.height
+        # Grounded: Sink +10px
+        self.y = GROUND_Y - self.height + 20
         
-        # Hitbox
-        padding = 5
-        self.rect = pygame.Rect(self.x + padding, self.y + padding, self.width - 2*padding, self.height - padding)
+        # Hitbox: Adjusted to match bulk of the cooler
+        self.padding_x = 25
+        self.padding_top = 20
+        
+        hitbox_y = self.y + self.padding_top
+        hitbox_height = GROUND_Y - hitbox_y
+        
+        self.rect = pygame.Rect(self.x + self.padding_x, hitbox_y, 
+                               self.width - 2*self.padding_x, hitbox_height)
         
     def update(self, speed):
         self.x -= speed
         if self.x < -self.width:
             self.removed = True
             
-        padding = 5
-        self.rect.x = int(self.x + padding)
+        self.rect.x = int(self.x + self.padding_x)
 
 class DumbbellObstacle(Obstacle):
     def __init__(self, x):
         # Dumbbell: Small, low obstacle
-        width = 40
-        height = 30
+        # Resized: 70x70
+        width = 70
+        height = 70
         type_name = "dumbbell"
         super().__init__(x, width, height, type_name)
-        self.y = GROUND_Y - self.height
         
-        # Padded hitbox
-        padding = 5
-        self.rect = pygame.Rect(self.x + padding, self.y + padding, self.width - 2*padding, self.height - padding)
+        # Grounded: Sink +30px to sit on the sand
+        self.y = GROUND_Y - self.height + 30
+        
+        # Padded hitbox: Narrower and shorter (very low profile)
+        # Horizontal: 10px each side -> 50px width
+        # Top: 45px padding -> 25px height (stops at ground)
+        self.padding_x = 15
+        self.padding_top = 22
+        
+        hitbox_y = self.y + self.padding_top
+        hitbox_height = GROUND_Y - hitbox_y
+        
+        self.rect = pygame.Rect(self.x + self.padding_x, hitbox_y, 
+                               self.width - 2*self.padding_x, hitbox_height)
 
     def update(self, speed):
         self.x -= speed
         if self.x < -self.width: self.removed = True
-        padding = 5
-        self.rect.x = int(self.x + padding)
+        
+        # Sync hitbox
+        self.rect.x = int(self.x + self.padding_x)
 
 class SurfboardObstacle(Obstacle):
     def __init__(self, x):
         # Surfboard: Tall, thin obstacle
-        width = 30
-        height = 80 # Quite tall, hard to jump over?
+        # Resized: 30x80 -> 60x120
+        width = 60
+        height = 120
         type_name = "surfboard"
         super().__init__(x, width, height, type_name)
-        self.y = GROUND_Y - self.height
         
-        # Padded hitbox
-        padding = 5
-        self.rect = pygame.Rect(self.x + padding, self.y + padding, self.width - 2*padding, self.height - padding)
+        # Grounded: Sink +45px to "stick" to the sand better
+        self.y = GROUND_Y - self.height + 35
+        
+        # Padded hitbox: Narrower and shorter to match surfboard shape
+        # Left/Right padding: 22px each -> 16px center
+        # Top padding: 10px (to reach the blue tip)
+        self.padding_x = 22
+        self.padding_top = 20
+        
+        # Height adjustment: Make hitbox stop at the ground level (GROUND_Y)
+        # Rect Y is self.y + padding_top
+        # Ground is at GROUND_Y
+        # So height = GROUND_Y - (self.y + padding_top)
+        hitbox_y = self.y + self.padding_top
+        hitbox_height = GROUND_Y - hitbox_y
+        
+        self.rect = pygame.Rect(self.x + self.padding_x, hitbox_y, 
+                               self.width - 2 * self.padding_x, hitbox_height)
 
     def update(self, speed):
         self.x -= speed
         if self.x < -self.width: self.removed = True
-        padding = 5
-        self.rect.x = int(self.x + padding)
+        
+        # Sync hitbox position
+        self.rect.x = int(self.x + self.padding_x)
 
 class DumbbellBoxObstacle(Obstacle):
     def __init__(self, x):
         # Box: Heavy, bit larger than cooler
-        width = 70
-        height = 60
+        # Resized: 120x120
+        width = 120
+        height = 120
         type_name = "dumbbell_box"
         super().__init__(x, width, height, type_name)
-        self.y = GROUND_Y - self.height
         
-        # Padded hitbox
-        padding = 5
-        self.rect = pygame.Rect(self.x + padding, self.y + padding, self.width - 2*padding, self.height - padding)
+        # Grounded: Sink +30px to sit on the sand
+        self.y = GROUND_Y - self.height + 45
+        
+        # Padded hitbox: Narrower and shorter (very low profile)
+        # Horizontal: 10px each side -> 50px width
+        # Top: 45px padding -> 25px height (stops at ground)
+        self.padding_x = 30
+        self.padding_top = 30
+        
+        hitbox_y = self.y + self.padding_top
+        hitbox_height = GROUND_Y - hitbox_y
+        
+        self.rect = pygame.Rect(self.x + self.padding_x, hitbox_y, 
+                               self.width - 2*self.padding_x, hitbox_height)
 
     def update(self, speed):
         self.x -= speed
         if self.x < -self.width: self.removed = True
-        padding = 5
-        self.rect.x = int(self.x + padding)
+        
+        # Sync hitbox
+        self.rect.x = int(self.x + self.padding_x)
+
+class BeachNetObstacle(Obstacle):
+    def __init__(self, x):
+        # Beach Net: Taller, suspended. Must crouch.
+        width = 300
+        height = 200
+        type_name = "beach_net"
+        super().__init__(x, width, height, type_name)
+        
+        # Position: Suspended. Bottom of sprite should be at GROUND_Y - offset.
+        # But image might have poles. Let's assume the "lethal" part starts high.
+        # Standing head is at GROUND_Y - 95.
+        # Crouching head is at GROUND_Y - 40.
+        # Let's place the bottom of the lethal zone at GROUND_Y - 55.
+        self.y = GROUND_Y - height + 60 # Visual sink
+        
+        # Hitbox (Top zone)
+        # Lethal padding from bottom: we want the bottom of the hitbox to be GROUND_Y - 55
+        # hitbox_bottom = y + height - padding_bottom = GROUND_Y - 55
+        # (GROUND_Y - height + 10) + height - padding_bottom = GROUND_Y - 55
+        # GROUND_Y + 10 - padding_bottom = GROUND_Y - 55 => padding_bottom = 65
+        self.padding_bottom = 160
+        self.padding_x = 35
+        self.padding_top = 40
+        
+        self.rect = pygame.Rect(self.x + self.padding_x, self.y + self.padding_top,
+                               self.width - 2*self.padding_x, self.height - self.padding_bottom)
+
+    def update(self, speed):
+        self.x -= speed
+        if self.x < -self.width: self.removed = True
+        self.rect.x = int(self.x + self.padding_x)
+
+class BarraLibreObstacle(Obstacle):
+    def __init__(self, x):
+        # Bar: Thin, suspended. Must crouch.
+        # User defined size
+        width = 250
+        height = 145
+        type_name = "bar_crouch"
+        super().__init__(x, width, height, type_name)
+        
+        # Grounded: Sink slightly to sit on sand
+        self.y = GROUND_Y - height + 45
+
+        # Hitbox: Elevated to the horizontal bar
+        # Horizontal: 20px padding
+        # Top: 10px padding to reach the bar
+        # Height: 15px for the bar thickness
+        self.padding_x = 70
+        self.padding_top = 25
+        self.hitbox_height = 15
+        
+        self.rect = pygame.Rect(self.x + self.padding_x, self.y + self.padding_top,
+                               self.width - 2*self.padding_x, self.hitbox_height)
+
+    def update(self, speed):
+        self.x -= speed
+        if self.x < -self.width: self.removed = True
+        
+        # Sync hitbox
+        self.rect.x = int(self.x + self.padding_x)

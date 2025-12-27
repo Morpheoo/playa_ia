@@ -22,7 +22,7 @@ JUMP_HEIGHT = 100 # Approx 2x player height (player is 50x50)
 
 PLAYER_WIDTH = 44
 
-PLAYER_HEIGHT = 60
+PLAYER_HEIGHT = 95
 
 PLAYER_X = 50
 
@@ -34,7 +34,7 @@ GROUND_Y = SCREEN_HEIGHT - 50
 
 JUMP_DURATION = 35 # frames
 
-CROUCH_HEIGHT = 40
+CROUCH_HEIGHT = 60
 
 
 

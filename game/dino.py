@@ -74,7 +74,7 @@ class Dino:
         
         # Hitbox (inset)
         padding_x = 10
-        padding_y = 5
+        padding_y = 12
         self.rect = pygame.Rect(self.x + padding_x, self.y + padding_y, self.width - 2*padding_x, self.height - 2*padding_y)
 
     def update_animation(self, dt):

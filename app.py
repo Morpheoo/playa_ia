@@ -97,7 +97,9 @@ if 'assets' not in st.session_state or not st.session_state.assets:
             "dumbbell": "dumbbell.png",
             "surfboard": "surfboard.png",
             "dumbbell_box": "dumbbell_box.png",
-            "ground": "ground.png"
+            "ground": "ground.png",
+            "beach_net": "beach_net.png",
+            "bar_crouch": "bar_crouch.png"
         }
         
         for key, filename in asset_files.items():
@@ -131,6 +133,41 @@ debug_mode = st.sidebar.checkbox("🟥 Mostrar Hitboxes", value=False)
 
 if manual_mode and keyboard is None:
     st.sidebar.error("Librería 'keyboard' no instalada. Ejecuta: pip install keyboard")
+
+# --- DEBUG TOOLS (New) ---
+st.sidebar.markdown("---")
+st.sidebar.header("🛠️ Herramientas de Diseño")
+obs_to_spawn = st.sidebar.selectbox("Seleccionar Obstáculo", 
+    ["Tabla de Surf", "Coche", "Dron", "Cono", "Balón", "Nevera", "Mancuerna", "Caja Mancuernas", "Red Playa", "Barra Libre"])
+
+col_d1, col_d2 = st.sidebar.columns(2)
+with col_d1:
+    if st.button("✨ Aparecer"):
+        # Mapping names to classes
+        from game.obstacle import (SurfboardObstacle, CarObstacle, Drone, ConeObstacle, BeachBall, 
+                                 CoolerObstacle, DumbbellObstacle, DumbbellBoxObstacle,
+                                 BeachNetObstacle, BarraLibreObstacle)
+        obs_map = {
+            "Tabla de Surf": SurfboardObstacle,
+            "Coche": CarObstacle,
+            "Dron": Drone,
+            "Cono": ConeObstacle,
+            "Balón": BeachBall,
+            "Nevera": CoolerObstacle,
+            "Mancuerna": DumbbellObstacle,
+            "Caja Mancuernas": DumbbellBoxObstacle,
+            "Red Playa": BeachNetObstacle,
+            "Barra Libre": BarraLibreObstacle
+        }
+        new_obs = obs_map[obs_to_spawn](SCREEN_WIDTH // 2) # Spawn in the middle for visibility
+        st.session_state.engine.obstacles.append(new_obs)
+        st.session_state.render_trigger = time.time() # Force a render
+
+with col_d2:
+    if st.button("🗑️ Limpiar"):
+        st.session_state.engine.clear_obstacles()
+        st.session_state.render_trigger = time.time()
+# -------------------------
 
 # Manual uploaders removed as per user request. Assets are loaded from assets/ directory.
 
@@ -452,7 +489,16 @@ if st.session_state.running:
             time.sleep(target_frame_time - elapsed_frame)
         
 else:
-    game_placeholder.info("Presiona 'Start' para iniciar la evolución.")
+    # --- REAL-TIME PREVIEW WHEN PAUSED (New) ---
+    surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+    st.session_state.engine.draw(surface, st.session_state.assets, debug_mode)
+    img_data = pygame.surfarray.array3d(surface)
+    img_data = img_data.transpose([1, 0, 2])
+    game_placeholder.image(img_data, channels="RGB", output_format="JPEG", width="stretch")
+    # ------------------------------------------
+    
+    # Use a separate info call so it doesn't overwrite the image
+    st.info("⏸️ Juego Pausado. Presiona 'Start' para continuar o usa las herramientas de diseño.")
     
     if st.session_state.ga.history:
         df = pd.DataFrame(st.session_state.ga.history)

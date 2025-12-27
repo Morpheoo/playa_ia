@@ -3,7 +3,9 @@ import pygame
 import random
 from config import *
 from .dino import Dino
-from .obstacle import CarObstacle, Drone, ConeObstacle, BeachBall, CoolerObstacle, DumbbellObstacle, SurfboardObstacle, DumbbellBoxObstacle
+from .obstacle import (CarObstacle, Drone, ConeObstacle, BeachBall, CoolerObstacle, 
+                         DumbbellObstacle, SurfboardObstacle, DumbbellBoxObstacle,
+                         BeachNetObstacle, BarraLibreObstacle)
 
 class Engine:
     def __init__(self):
@@ -25,6 +27,9 @@ class Engine:
         self.next_spawn_dist = random.randint(MIN_SPAWN_DIST, MAX_SPAWN_DIST)
         self.distance_traveled = 0
         self.game_over = False
+
+    def clear_obstacles(self):
+        self.obstacles = []
 
     def update(self):
         if self.game_over:
@@ -51,17 +56,21 @@ class Engine:
             
             if r < BIRD_PROBABILITY:
                 self.obstacles.append(Drone(SCREEN_WIDTH))
-            elif r < BIRD_PROBABILITY + 0.15: # 15% Cone
+            elif r < BIRD_PROBABILITY + 0.10: # 10% Red Playa
+                self.obstacles.append(BeachNetObstacle(SCREEN_WIDTH))
+            elif r < BIRD_PROBABILITY + 0.20: # 10% Barra Libre
+                self.obstacles.append(BarraLibreObstacle(SCREEN_WIDTH))
+            elif r < BIRD_PROBABILITY + 0.35: # 15% Cono
                 self.obstacles.append(ConeObstacle(SCREEN_WIDTH))
-            elif r < BIRD_PROBABILITY + 0.30: # 15% Beach Ball
+            elif r < BIRD_PROBABILITY + 0.45: # 10% Pelota
                 self.obstacles.append(BeachBall(SCREEN_WIDTH))
-            elif r < BIRD_PROBABILITY + 0.45: # 15% Cooler
+            elif r < BIRD_PROBABILITY + 0.55: # 10% Nevera
                 self.obstacles.append(CoolerObstacle(SCREEN_WIDTH))
-            elif r < BIRD_PROBABILITY + 0.60: # 15% Dumbbell (New)
+            elif r < BIRD_PROBABILITY + 0.65: # 10% Mancuerna
                 self.obstacles.append(DumbbellObstacle(SCREEN_WIDTH))
-            elif r < BIRD_PROBABILITY + 0.70: # 10% Surfboard (New, Rare)
+            elif r < BIRD_PROBABILITY + 0.75: # 10% Tabla Surf
                 self.obstacles.append(SurfboardObstacle(SCREEN_WIDTH))
-            elif r < BIRD_PROBABILITY + 0.85: # 15% Dumbbell Box (New)
+            elif r < BIRD_PROBABILITY + 0.85: # 10% Caja Mancuernas
                 self.obstacles.append(DumbbellBoxObstacle(SCREEN_WIDTH))
             else:
                 self.obstacles.append(CarObstacle(SCREEN_WIDTH))
