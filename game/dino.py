@@ -130,10 +130,20 @@ class Dino:
                    sprite = assets["dino"]
         
         if sprite:
-            # Check if sprite is a surface (it should be)
-            if isinstance(sprite, pygame.Surface):
-                scaled_sprite = pygame.transform.scale(sprite, (int(self.width), int(self.height))) 
-                screen.blit(scaled_sprite, (self.x, self.y))
+            target_size = (int(self.width), int(self.height))
+            
+            # --- OPTIMIZACIÓN: Caché de escalado ---
+            # Como los dinos tienen animaciones, guardamos la versión escalada de cada frame
+            if not hasattr(self, "_sprite_cache"):
+                self._sprite_cache = {}
+            
+            sprite_id = id(sprite) # Usamos el ID del objeto para identificar el frame
+            if sprite_id not in self._sprite_cache or self._sprite_cache[sprite_id][1] != target_size:
+                # Solo escalamos si es un frame nuevo o el tamaño cambió
+                self._sprite_cache[sprite_id] = (pygame.transform.scale(sprite, target_size), target_size)
+            
+            scaled_sprite = self._sprite_cache[sprite_id][0]
+            screen.blit(scaled_sprite, (self.x, self.y))
         
         # Nuevo sistema de animación para humanos
         elif assets and "human_anim" in assets:

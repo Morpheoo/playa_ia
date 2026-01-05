@@ -16,6 +16,16 @@ class AssetManager:
         try:
             # Usamos PIL primero porque es más robusto con algunos formatos
             img = Image.open(path)
+            
+            # --- OPTIMIZACIÓN: Limitar resolución de origen ---
+            # Si la imagen es gigante (como las de 2MB que vimos), la bajamos a un tamaño manejable.
+            # Ningún obstáculo en el juego necesita más de 500px para verse bien.
+            MAX_SIZE = 500
+            if img.width > MAX_SIZE or img.height > MAX_SIZE:
+                ratio = min(MAX_SIZE / img.width, MAX_SIZE / img.height)
+                new_size = (int(img.width * ratio), int(img.height * ratio))
+                img = img.resize(new_size, Image.Resampling.LANCZOS)
+
             mode = img.mode
             size = img.size
             data = img.tobytes()

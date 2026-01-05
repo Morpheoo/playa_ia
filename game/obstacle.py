@@ -56,12 +56,17 @@ class Obstacle:
             img_key = "dron"
             
         if assets and img_key and img_key in assets and assets[img_key]:
-            sprite = pygame.transform.scale(assets[img_key], (int(self.width), int(self.height)))
-            screen.blit(sprite, (self.x, self.y)) # Draw at x,y (visual) -- hitbox is separate
+            # --- OPTIMIZACIÓN: Caché de escalado ---
+            target_size = (int(self.width), int(self.height))
+            if not hasattr(self, "_cached_sprite") or self._cached_size != target_size:
+                self._cached_sprite = pygame.transform.scale(assets[img_key], target_size)
+                self._cached_size = target_size
+            
+            screen.blit(self._cached_sprite, (self.x, self.y)) # Dibuja la imagen (visual)
         else:
             # Si no hay imagen, dibujamos un rectángulo gris
             color = (130, 130, 130)
-            pygame.draw.rect(screen, color, self.rect) # Debug: draws the hitbox if no sprite, or sprite if not found
+            pygame.draw.rect(screen, color, self.rect)
 
 class CarObstacle(Obstacle):
     """Coches: son grandes y se pueden pisar por arriba (el techo es seguro)."""

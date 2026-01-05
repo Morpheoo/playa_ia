@@ -386,26 +386,32 @@ if st.session_state.running:
         # 4. Dibujamos todo en el lienzo
         st.session_state.engine.draw(surface, st.session_state.assets, debug_mode)
         
+        # --- OPTIMIZACIÓN: Reducir resolución para Streamlit ---
+        # Enviamos una imagen más pequeña (400x200) y dejamos que el navegador la estire.
+        # Esto ahorra mucho ancho de banda y procesamiento en el navegador.
+        surface_small = pygame.transform.scale(surface, (400, 200))
+        
         # Convertimos el dibujo de Pygame a algo que Streamlit pueda mostrar
-        img_data = pygame.surfarray.array3d(surface)
-        img_data = img_data.transpose([1, 0, 2]) # Cambiamos de eje (W, H, C) -> (H, W, C)
-        # img = Image.fromarray(img_data)
+        # Usamos array3d sobre la imagen pequeña
+        img_data = pygame.surfarray.array3d(surface_small)
+        img_data = img_data.transpose([1, 0, 2]) # (W, H, C) -> (H, W, C)
         
         # Mostramos la imagen en la web
-        # Use numpy array directly for speed and avoid PIL overhead
         try:
+            # width="stretch" hará que se vea de nuevo en tamaño completo
             game_placeholder.image(img_data, channels="RGB", output_format="JPEG", width="stretch")
         except Exception:
             pass
         
-        # Actualizamos los textos de estadísticas
-        alive_count = sum(1 for d in st.session_state.engine.dinos if not getattr(d, "dead", False))
-        gen_text.metric("Generación", st.session_state.ga.generation)
-        alive_text.metric("Agentes Vivos", alive_count)
-        nn_count_text.metric("Redes Neuronales Activas", len(st.session_state.networks))
-        # Use Global Best for "Mejor Histórico"
-        best_text.metric("Mejor Histórico", f"{int(st.session_state.ga.global_best_fitness)}")
-        curr_fit_text.metric("Fitness Actual", f"{int(st.session_state.engine.distance_traveled)}")
+        # Actualizamos los textos de estadísticas cada 5 frames para no saturar Streamlit
+        st.session_state.frame_count += 1
+        if st.session_state.frame_count % 5 == 0:
+            alive_count = sum(1 for d in st.session_state.engine.dinos if not getattr(d, "dead", False))
+            gen_text.metric("Generación", st.session_state.ga.generation)
+            alive_text.metric("Agentes Vivos", alive_count)
+            nn_count_text.metric("Redes Neuronales Activas", len(st.session_state.networks))
+            best_text.metric("Mejor Histórico", f"{int(st.session_state.ga.global_best_fitness)}")
+            curr_fit_text.metric("Fitness Actual", f"{int(st.session_state.engine.distance_traveled)}")
         
         # Si todos murieron o se acabó el tiempo, pasamos a la siguiente generación
         if st.session_state.engine.game_over:
