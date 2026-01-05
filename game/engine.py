@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+# engine.py - El motor del juego. 
+# Aquí es donde se controla el movimiento, los obstáculos y las colisiones.
+
 import pygame
 import random
 from config import *
@@ -8,17 +11,22 @@ from .obstacle import (CarObstacle, Drone, ConeObstacle, BeachBall, CoolerObstac
                          BeachNetObstacle, BarraLibreObstacle)
 
 class Engine:
+    """
+    La clase Engine es como el "director de orquesta" del juego.
+    """
     def __init__(self):
-        self.dinos = []
-        self.obstacles = []
+        self.dinos = [] # Lista de corredores
+        self.obstacles = [] # Lista de obstáculos en pantalla
         self.game_speed = INITIAL_GAME_SPEED
         self.score = 0
         self.spawn_timer = 0
+        # Distancia para que aparezca el siguiente obstáculo
         self.next_spawn_dist = random.randint(MIN_SPAWN_DIST, MAX_SPAWN_DIST)
         self.distance_traveled = 0
         self.game_over = False
 
     def reset(self, num_dinos=1):
+        """Reinicia todo para una nueva ronda o generación."""
         self.dinos = [Dino() for _ in range(num_dinos)]
         self.obstacles = []
         self.game_speed = INITIAL_GAME_SPEED
@@ -29,21 +37,27 @@ class Engine:
         self.game_over = False
 
     def clear_obstacles(self):
+        """Limpia los obstáculos (útil para pruebas)."""
         self.obstacles = []
 
     def update(self):
+        """Se ejecuta en cada frame para mover todo."""
         if self.game_over:
             return
 
+        # Aumentamos la velocidad y la distancia
         self.game_speed += SPEED_INCREMENT
         self.distance_traveled += self.game_speed
         self.score = int(self.distance_traveled / 10)
 
+        # Movemos los obstáculos
         for obs in self.obstacles:
             obs.update(self.game_speed)
         
+        # Quitamos los que ya se salieron de la pantalla
         self.obstacles = [obs for obs in self.obstacles if not obs.removed]
 
+        # Lógica para aparecer nuevos obstáculos
         self.spawn_timer += self.game_speed
         if self.spawn_timer >= self.next_spawn_dist:
             self.spawn_timer = 0
@@ -54,6 +68,7 @@ class Engine:
             # Birds/Drones: ~10% (BIRD_PROBABILITY)
             # Cars: Remaining (Default)
             
+            # Elegimos un obstáculo al azar con diferentes probabilidades
             if r < BIRD_PROBABILITY:
                 self.obstacles.append(Drone(SCREEN_WIDTH))
             elif r < BIRD_PROBABILITY + 0.10: # 10% Red Playa
@@ -82,7 +97,7 @@ class Engine:
             
             target_ground = GROUND_Y
             
-            # Check for Platform Collision (Car Roof)
+            # Lógica especial para saltar sobre el techo de los coches
             for obs in self.obstacles:
                 if isinstance(obs, CarObstacle):
                     # Check horizontal overlap
@@ -116,20 +131,23 @@ class Engine:
                         if (dino.y + dino.height) <= (roof_y + 30):
                              target_ground = roof_y
             
+            # Actualizamos al dino y revisamos si chocó
             dino.update(target_ground)
             for obs in self.obstacles:
                 if dino.rect.colliderect(obs.rect):
                     dino.dead = True
-                    dino.fitness = self.distance_traveled
+                    dino.fitness = self.distance_traveled # Su puntuación final
                     break
             
             if not dino.dead:
                 alive_dinos += 1
         
+        # Si ya no queda nadie vivo, se acaba la ronda
         if alive_dinos == 0:
             self.game_over = True
 
     def get_game_state(self):
+        """Devuelve info útil para la IA."""
         next_obs = None
         for obs in self.obstacles:
             if obs.x + obs.width > PLAYER_X:
@@ -143,6 +161,8 @@ class Engine:
         }
 
     def draw(self, screen, assets=None, debug_mode=False):
+        """Dibuja todo en la pantalla de Pygame."""
+        # Cambio de fondo automático según la distancia (Amanecer -> Atardecer -> Noche)
         if assets and "backgrounds" in assets:
             backgrounds = assets["backgrounds"]
             # Cycling logic
@@ -167,7 +187,7 @@ class Engine:
             else:
                  screen.fill((255, 255, 255))
             
-            # Transition from previous if at start of cycle
+            # Transición suave entre fondos
             # Wait, user said "Once achieved, makes a light transition".
             # So if we just passed 7000 (offset is small), we want to fade FROM prev TO current.
             # So draw Prev, then blend Current on top? 
@@ -195,7 +215,7 @@ class Engine:
         else:
             screen.fill((255, 255, 255))
         
-        # Ground
+        # El suelo con scroll infinito
         if assets and "ground" in assets:
             ground_img = assets["ground"]
             g_width = ground_img.get_width()
@@ -212,6 +232,7 @@ class Engine:
         else:
             pygame.draw.line(screen, (83, 83, 83), (0, GROUND_Y), (SCREEN_WIDTH, GROUND_Y), 2)
         
+        # Dibujamos obstáculos y dinos
         for obs in self.obstacles:
             obs.draw(screen, assets)
             
@@ -222,7 +243,7 @@ class Engine:
             if not getattr(dino, "dead", False):
                 dino.draw(screen, assets, frame_count)
 
-        # DEBUG: Hitboxes
+        # Si activamos el modo depuración, vemos las cajas de colisión (hitboxes)
         if debug_mode:
             for obs in self.obstacles:
                 # Red for obstacles

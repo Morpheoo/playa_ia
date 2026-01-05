@@ -1,8 +1,12 @@
 ﻿# -*- coding: utf-8 -*-
+# app.py - Esta es la parte principal de nuestro proyecto, donde armamos la página web con Streamlit
+# Aquí juntamos el motor del juego, la IA y todos los dibujos (assets).
+
 import streamlit as st
 import os
 
-# Set dummy video driver for headless pygame
+# Configuramos un driver "fantasma" para que Pygame no intente abrir una ventana real,
+# ya que Streamlit corre en el servidor y no tiene pantalla física.
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 
 import pygame
@@ -13,47 +17,48 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import pandas as pd
 
-# Initialize pygame display for surface conversion
+# Inicializamos Pygame para poder trabajar con imágenes y superficies
 pygame.init()
 if pygame.display.get_surface() is None:
     pygame.display.set_mode((1, 1))
 
+# Importamos las piezas de nuestro propio rompecabezas
 from game.engine import Engine
 from game.assets import AssetManager
 from ai.genetic_algo import GeneticAlgorithm
 from ai.brain import NeuralNetwork
 from config import *
 
-# Optional: Keyboard for manual play
+# Esto es por si queremos jugar nosotros mismos con el teclado
 try:
     import keyboard
 except ImportError:
     keyboard = None
 
-# Set page config
+# Configuración de la pestaña del navegador
 st.set_page_config(page_title="AI Runner Evolution", layout="wide")
 
 st.title("🏃 AI Runner Evolution: Algoritmo Genético")
 
-# Initialize Session State
+# Inicializamos el "Session State" de Streamlit para que no se borren las variables al refrescar
 if 'engine' not in st.session_state:
-    st.session_state.engine = Engine()
-    st.session_state.ga = GeneticAlgorithm()
-    st.session_state.running = False
+    st.session_state.engine = Engine() # El motor del juego
+    st.session_state.ga = GeneticAlgorithm() # El algoritmo que hace evolucionar a los dinos
+    st.session_state.running = False # ¿Está el juego corriendo?
     st.session_state.generation_complete = False
-    st.session_state.networks = []
+    st.session_state.networks = [] # Aquí guardamos los "cerebros" de la generación actual
     st.session_state.start_time = time.time()
     st.session_state.frame_count = 0
-    st.session_state.assets = {} # Store pygame surfaces
+    st.session_state.assets = {} # Donde guardamos las fotos del juego
 
     st.session_state.assets = {} # Store pygame surfaces
 
-# Load default assets from disk (Ensure this runs if assets are empty)
+# Cargamos los dibujos (assets) si aún no están listos
 if 'assets' not in st.session_state or not st.session_state.assets:
     st.session_state.assets = {}
     assets_dir = os.path.join(os.getcwd(), "assets")
     if os.path.exists(assets_dir):
-        # 1. Load SpriteSheets
+        # 1. Cargamos las animaciones del Dino
         spritesheet_json = os.path.join(assets_dir, "dino_run_spritesheet.json")
         if os.path.exists(spritesheet_json):
              frames = AssetManager.load_spritesheet(spritesheet_json, assets_dir)
@@ -63,23 +68,23 @@ if 'assets' not in st.session_state or not st.session_state.assets:
                  if "dino" not in st.session_state.assets:
                      st.session_state.assets["dino"] = frames[0]
 
-        # 1.5 Load Human Animation (New System)
+        # 1.5 Cargamos animaciones humanas (las que agregamos nuevas)
         human_anim = AssetManager.load_human_animation(assets_dir)
         if human_anim:
             st.session_state.assets["human_anim"] = human_anim
             st.session_state.last_time = time.time()
 
-        # 1.6 Load Backgrounds
+        # 1.6 Los fondos (playa, etc.)
         bg_surfs = AssetManager.load_backgrounds(assets_dir)
         if bg_surfs:
             st.session_state.assets["backgrounds"] = bg_surfs
 
-        # 1.7 Load Coachwalk Animation
+        # 1.7 Animación especial "coachwalk"
         coachwalk_frames = AssetManager.load_coachwalk_animation(assets_dir)
         if coachwalk_frames:
              st.session_state.assets["coachwalk"] = coachwalk_frames
 
-        # 2. Load Static Images
+        # 2. Cargamos todas las imágenes sueltas de los obstáculos
         asset_files = {
             "dino": "dino.png",
             # "dino_run1": "dino_run1.png", # Deprecated if spritesheet exists
@@ -113,7 +118,7 @@ if 'assets' not in st.session_state or not st.session_state.assets:
                 if surf:
                     st.session_state.assets[key] = surf
 
-# Sidebar - Parameters
+# --- BARRA LATERAL (Los controles para el usuario) ---
 st.sidebar.header("Parámetros de Entrenamiento")
 pop_size = st.sidebar.slider("Población", 10, 100, POPULATION_SIZE, step=10)
 mutation_rate = st.sidebar.slider("Tasa de Mutación", 0.0, 1.0, MUTATION_RATE, 0.01)
@@ -145,7 +150,7 @@ selected_label = st.sidebar.selectbox(
 )
 st.session_state.ga.strategy = strategy_labels[selected_label]
 
-# Status display in sidebar
+# Si la IA no avanza, mostramos una advertencia
 if st.session_state.ga.stagnation_counter > 5:
     st.sidebar.warning(f"⚠️ Estancamiento detectado ({st.session_state.ga.stagnation_counter} rds)")
     if st.session_state.ga.strategy == "DYNAMIC":
@@ -154,7 +159,7 @@ if st.session_state.ga.stagnation_counter > 5:
 if manual_mode and keyboard is None:
     st.sidebar.error("Librería 'keyboard' no instalada. Ejecuta: pip install keyboard")
 
-# --- DEBUG TOOLS (New) ---
+# --- HERRAMIENTAS DE DISEÑO (Para probar obstáculos nosotros mismos) ---
 st.sidebar.markdown("---")
 st.sidebar.header("🛠️ Herramientas de Diseño")
 obs_to_spawn = st.sidebar.selectbox("Seleccionar Obstáculo", 
@@ -191,10 +196,10 @@ with col_d2:
 
 # Manual uploaders removed as per user request. Assets are loaded from assets/ directory.
 
-# Update parameters in GA
+# Actualizamos los números en el Algoritmo Genético según lo que el usuario puso en la sidebar
 st.session_state.ga.set_params(pop_size, mutation_rate, selection_ratio, elitism)
 
-# Controls
+# --- BOTONES DE CONTROL ---
 col1, col2, col3, col4 = st.columns(4)
 with col1:
     if st.button("Start / Resume", key="start_btn"):
@@ -209,7 +214,7 @@ with col1:
                 st.session_state.generation_complete = False
         
         elif st.session_state.generation_complete or len(st.session_state.engine.dinos) == 0:
-            # Start new generation (AI Mode)
+            # Empezamos una nueva generación de IA
             genomes = st.session_state.ga.population
             st.session_state.engine.reset(num_dinos=len(genomes))
             st.session_state.networks = [NeuralNetwork(g) for g in genomes]
@@ -234,17 +239,17 @@ with col3:
 with col4:
     if st.button("Next Gen (Skip)"):
         if not st.session_state.generation_complete:
-            # Finish current gen forcibly
+            # Saltamos a la siguiente generación manualmente
             fitnesses = [d.fitness if hasattr(d, "fitness") else st.session_state.engine.distance_traveled for d in st.session_state.engine.dinos]
             st.session_state.ga.next_generation(fitnesses)
             st.session_state.engine.reset(num_dinos=len(st.session_state.ga.population))
             st.session_state.networks = [NeuralNetwork(g) for i, g in enumerate(st.session_state.ga.population)]
 
-# Main Layout
+# --- DISEÑO DE LA PÁGINA (Juego a la izquierda, Stats a la derecha) ---
 game_col, stats_col = st.columns([2, 1])
 
 with game_col:
-    game_placeholder = st.empty()
+    game_placeholder = st.empty() # Espacio vacío donde pondremos el juego
     
 with stats_col:
     st.subheader("Estadísticas")
@@ -257,30 +262,30 @@ with stats_col:
     st.subheader("Progreso de Fitness")
     chart_placeholder = st.empty()
 
-# Graph Visualization
+# Visualización del cerebro (Red Neuronal)
 with st.expander("Ver Red Neuronal del Mejor Agente"):
     graph_placeholder = st.empty()
 
-# Game Loop
+# --- BUCLE PRINCIPAL DEL JUEGO (Game Loop) ---
 if st.session_state.running:
-    # Pygame Surface for rendering
+    # Creamos un lienzo de Pygame del tamaño de la pantalla
     surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
     
     while st.session_state.running:
         frame_start_time = time.time()
 
         
-        # Simulation Loop
+        # Bucle de simulación (si el usuario acelera el juego)
         for _ in range(sim_speed):
             if not st.session_state.running: break
             
-            # 1. Get Game State
+            # 1. Obtenemos el estado actual del juego (dónde están los obstáculos)
             state = st.session_state.engine.get_game_state()
             obs = state["next_obstacle"]
             
-            # 2. AI Decision for each dino
+            # 2. Decisión de la IA (o control manual)
             if manual_mode and keyboard:
-                 # MANUAL CONTROL
+                 # CONTROL MANUAL CON TECLADO
                  for dino in st.session_state.engine.dinos:
                      if getattr(dino, "dead", False): continue
                      
@@ -293,10 +298,11 @@ if st.session_state.running:
                          dino.stop_crouch()
                          
             elif st.session_state.networks and len(st.session_state.networks) == len(st.session_state.engine.dinos):
+                # CONTROL POR IA (Redes Neuronales)
                 # 2. Strict Input Definition (6 Normalized Features)
                 # DistanceX_norm, ObsY_norm, ObsW_norm, ObsH_norm, PlayerY_norm, Speed_norm
                 
-                # Get next obstacle data
+                # Recolectamos lo que la IA "ve" (inputs)
                 dist_x = 0
                 obs_y = 0
                 obs_w = 0
@@ -318,7 +324,7 @@ if st.session_state.running:
                     obs_w = 0
                     obs_h = 0
 
-                # Normalize [0, 1]
+                # Normalizamos los datos para que la IA entienda mejor (entre 0 y 1)
                 inputs = np.zeros(INPUT_SIZE) # Size 6
                 inputs[0] = np.clip(dist_x / WORLD_W, 0, 1) # DistX
                 inputs[1] = np.clip(obs_y / WORLD_H, 0, 1)  # ObsY
@@ -329,15 +335,16 @@ if st.session_state.running:
                 norm_speed = np.clip((state["speed"] - SPEED_MIN) / (SPEED_MAX - SPEED_MIN), 0, 1)
                 inputs[5] = norm_speed # Speed is idx 5
                 
+                # Cada dino procesa sus propios datos
                 for i, dino in enumerate(st.session_state.engine.dinos):
                     if getattr(dino, "dead", False): continue
                     
                     inputs[4] = np.clip(dino.y / WORLD_H, 0, 1) # PlayerY is idx 4
                     
-                    # Activate NN (Returns [p_jump, p_crouch])
+                    # Activamos la Red Neuronal (Returns [p_jump, p_crouch])
                     preds = st.session_state.networks[i].activate(inputs)
                     
-                    # 3. Multi-label Decision Logic
+                    # Si la neurona dice que salte o se agache, lo hace
                     jump = preds[0] > JUMP_THRESHOLD
                     crouch = preds[1] > CROUCH_THRESHOLD
                     
@@ -349,13 +356,13 @@ if st.session_state.running:
                     else:
                         dino.stop_crouch()
             
-            # 3. Update Engine
+            # 3. Actualizamos el motor (físicas, colisiones, etc.)
             st.session_state.engine.update()
             
             if st.session_state.engine.game_over:
                  break
         
-        # 3.5 Update Animation (Once per render frame)
+        # 3.5 Actualizamos animaciones (Once per render frame)
         if "human_anim" in st.session_state.assets:
              # Calculate real dt for smooth animation
              now = time.time()
@@ -376,22 +383,22 @@ if st.session_state.running:
                      if hasattr(dino, "update_animation"):
                         dino.update_animation(anim_dt)
         
-        # 4. Render
+        # 4. Dibujamos todo en el lienzo
         st.session_state.engine.draw(surface, st.session_state.assets, debug_mode)
         
-        # Convert pygame surface to image
+        # Convertimos el dibujo de Pygame a algo que Streamlit pueda mostrar
         img_data = pygame.surfarray.array3d(surface)
-        img_data = img_data.transpose([1, 0, 2])
-        img = Image.fromarray(img_data)
+        img_data = img_data.transpose([1, 0, 2]) # Cambiamos de eje (W, H, C) -> (H, W, C)
+        # img = Image.fromarray(img_data)
         
-        # Update UI
+        # Mostramos la imagen en la web
         # Use numpy array directly for speed and avoid PIL overhead
         try:
             game_placeholder.image(img_data, channels="RGB", output_format="JPEG", width="stretch")
         except Exception:
             pass
         
-        # Stats
+        # Actualizamos los textos de estadísticas
         alive_count = sum(1 for d in st.session_state.engine.dinos if not getattr(d, "dead", False))
         gen_text.metric("Generación", st.session_state.ga.generation)
         alive_text.metric("Agentes Vivos", alive_count)
@@ -400,7 +407,7 @@ if st.session_state.running:
         best_text.metric("Mejor Histórico", f"{int(st.session_state.ga.global_best_fitness)}")
         curr_fit_text.metric("Fitness Actual", f"{int(st.session_state.engine.distance_traveled)}")
         
-        # Check Gen Completion
+        # Si todos murieron o se acabó el tiempo, pasamos a la siguiente generación
         if st.session_state.engine.game_over:
             if manual_mode:
                 # Just reset for another run
@@ -408,16 +415,16 @@ if st.session_state.running:
                 st.session_state.networks = []
                 time.sleep(1)
             else:
-                # Evolve (AI Mode)
+                # ¡Evolución! Los mejores tienen hijos, los peores se van. (AI Mode)
                 fitnesses = [d.fitness for d in st.session_state.engine.dinos]
                 st.session_state.ga.next_generation(fitnesses)
                 
-                # Plot progress
+                # Dibujamos la gráfica de progreso
                 if st.session_state.ga.history:
                     df = pd.DataFrame(st.session_state.ga.history)
                     chart_placeholder.line_chart(df.set_index("gen"))
                 
-                # Reset engine for next gen
+                # Reseteamos el juego con la nueva población
                 genomes = st.session_state.ga.population
                 st.session_state.engine.reset(num_dinos=len(genomes))
                 st.session_state.networks = [NeuralNetwork(g) for g in genomes]
@@ -425,7 +432,7 @@ if st.session_state.running:
                 # Optional: Update Graph
                 best_genome = st.session_state.ga.population[0]
                 
-                # Optional: Update Graph (Layered MLP Visualization)
+                # Dibujamos el cerebro (Red Neuronal) del mejor de esta ronda (Layered MLP Visualization)
                 best_genome = st.session_state.ga.population[0]
                 
                 fig = plt.figure(figsize=(8, 6))
@@ -463,7 +470,7 @@ if st.session_state.running:
                         ax.text(x - 0.08 if l==0 else x + 0.08 if l==2 else x, y + 0.06, lbl, 
                                 ha='center', fontsize=8, zorder=5)
 
-                # Draw Connections strictly (Fully Connected)
+                # Dibujamos las conexiones (pesos de las neuronas) strictly (Fully Connected)
                 # Input -> Hidden (W1)
                 w1 = best_genome.w1 #(Hidden, Input)
                 max_w = np.max(np.abs(w1)) if w1.size > 0 else 1.0
@@ -502,7 +509,7 @@ if st.session_state.running:
     
                 time.sleep(1)
         
-        # Cap FPS to 30 to avoid overloading Streamlit media storage
+        # Limitamos los FPS para no saturar al servidor de Streamlit
         elapsed_frame = time.time() - frame_start_time
         target_frame_time = 1.0 / 30.0
         if elapsed_frame < target_frame_time:
@@ -510,6 +517,7 @@ if st.session_state.running:
         
 else:
     # --- REAL-TIME PREVIEW WHEN PAUSED (New) ---
+    # Si el juego está en pausa, mostramos una imagen estática
     surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
     st.session_state.engine.draw(surface, st.session_state.assets, debug_mode)
     img_data = pygame.surfarray.array3d(surface)

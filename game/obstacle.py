@@ -1,22 +1,28 @@
 # -*- coding: utf-8 -*-
+# obstacle.py - Todos los peligros que hay que esquivar
+# Aquí definimos desde coches hasta drones y tablas de surf.
+
 import pygame
 import math
 import random
 from config import *
 
 class Obstacle:
+    """Clase base para todos los obstáculos."""
     def __init__(self, x, width, height, type_name):
         self.x = x
         self.width = width
         self.height = height
         self.type_name = type_name
         self.y = GROUND_Y - self.height
+        # El rect es para las colisiones
         self.rect = pygame.Rect(self.x, self.y, self.width, self.height)
         self.removed = False
 
     def update(self, speed):
+        """Mueve el obstáculo hacia la izquierda."""
         self.x -= speed
-        # Refined hitbox: shrink slightly to be forgiving
+        # Ajustamos el hitbox para que sea un poco más permisivo
         padding_x = 5
         padding_y = 5
         self.rect = pygame.Rect(self.x + padding_x, self.y + padding_y, self.width - 2*padding_x, self.height - 2*padding_y)
@@ -24,12 +30,10 @@ class Obstacle:
             self.removed = True
 
     def draw(self, screen, assets=None):
+        """Dibuja el obstáculo usando su imagen (sprite)."""
         img_key = None
-        if "cactus" in self.type_name:
-            # We could map specific cactus types to specific keys if needed
-            # For now, just use generic 'cactus' or 'cactus_small' / 'cactus_large' if available
-            img_key = "cactus" 
-        elif "car" in self.type_name:
+        # Mapeamos el nombre del tipo con la imagen que cargamos en app.py
+        if "car" in self.type_name:
             # type_name is like "car_0", "car_1", etc.
             img_key = self.type_name 
         elif "cone" in self.type_name:
@@ -55,10 +59,12 @@ class Obstacle:
             sprite = pygame.transform.scale(assets[img_key], (int(self.width), int(self.height)))
             screen.blit(sprite, (self.x, self.y)) # Draw at x,y (visual) -- hitbox is separate
         else:
+            # Si no hay imagen, dibujamos un rectángulo gris
             color = (130, 130, 130)
             pygame.draw.rect(screen, color, self.rect) # Debug: draws the hitbox if no sprite, or sprite if not found
 
 class CarObstacle(Obstacle):
+    """Coches: son grandes y se pueden pisar por arriba (el techo es seguro)."""
     def __init__(self, x):
         variant = random.randint(0, 4)
         # Dimensions for cars based on player size
@@ -69,8 +75,7 @@ class CarObstacle(Obstacle):
             
         super().__init__(x, width, height, type_name)
         
-        # User Feedback: Cars are floating and too hard to jump.
-        # Solution: Sink them 50px into the ground.
+        # Los hundimos un poco en el suelo para que no parezca que flotan
         self.y += 50
         self.rect.y = int(self.y)
 
@@ -80,21 +85,18 @@ class CarObstacle(Obstacle):
         if self.x < -self.width:
             self.removed = True
             
-        # Custom Hitbox for Car: Lower the top to allow "safe roof"
-        # We want the hitbox to be only the bottom 70% of the sprite (30% safe top)
-        # This covers doors/body as deadly, but allows roof walking.
+        # El techo es seguro (safe roof)
         self.safe_top_pct = 0.3
         self.roof_offset = int(self.height * self.safe_top_pct)
         
-        # Custom Hitbox for Car
-        # Refined: Add horizontal padding to prevent "invisible death".
-        # Player must clearly touch the car body (tires width).
+        # El hitbox mortal solo está en la parte de abajo del coche
         padding_x = 65
         
         # Rect(x, y, w, h)
         self.rect = pygame.Rect(self.x + padding_x, self.y + self.roof_offset, self.width - (2 * padding_x), self.height - self.roof_offset)
 
 class Drone(Obstacle):
+    """Drones: vuelan a diferentes alturas y flotan arriba y abajo."""
     def __init__(self, x):
         height_level = random.randint(0, 2)
         width = 46
@@ -103,6 +105,7 @@ class Drone(Obstacle):
         
         super().__init__(x, width, height, type_name)
         
+        # Diferentes alturas según el nivel elegido
         if height_level == 0:
             self.base_y = GROUND_Y - height - 10
         elif height_level == 1:
@@ -123,7 +126,7 @@ class Drone(Obstacle):
         if self.x < -self.width:
             self.removed = True
             
-        # Float logic
+        # Lógica para que suba y baje (seno)
         self.float_timer += 0.1
         self.y = self.base_y + math.sin(self.float_timer) * 20
         
@@ -133,9 +136,9 @@ class Drone(Obstacle):
         self.rect.y = int(self.y + padding)
 
 class ConeObstacle(Obstacle):
+    """Cono: obstáculo pequeño en el suelo."""
     def __init__(self, x):
         # Cone is small. Let's make it roughly half player height.
-        height = int(PLAYER_HEIGHT * 0.7) # approx 47 * 0.7 = 33px. Maybe a bit bigger?
         # Let's try explicit pixels for clarity as requested -> "Small Lethal Obstacle"
         height = 50 
         width = 40 # Standard cone proportion
@@ -163,6 +166,7 @@ class ConeObstacle(Obstacle):
         # y is static relative to ground
 
 class BeachBall(Obstacle):
+    """Pelota de playa: ancha pero bajita."""
     def __init__(self, x):
         # Increased size as requested (60 -> 70)
         width = 100
@@ -194,6 +198,7 @@ class BeachBall(Obstacle):
         self.rect.x = int(self.x + self.padding_x)
 
 class CoolerObstacle(Obstacle):
+    """Nevera: obstáculo rectangular medio."""
     def __init__(self, x):
         # Cooler dimensions (Medium-Small, Boxy)
         # Resized: 60x50 -> 80x70
@@ -223,6 +228,7 @@ class CoolerObstacle(Obstacle):
         self.rect.x = int(self.x + self.padding_x)
 
 class DumbbellObstacle(Obstacle):
+    """Mancuerna: muy pequeña y difícil de ver si vas rápido."""
     def __init__(self, x):
         # Dumbbell: Small, low obstacle
         # Resized: 70x70
@@ -254,6 +260,7 @@ class DumbbellObstacle(Obstacle):
         self.rect.x = int(self.x + self.padding_x)
 
 class SurfboardObstacle(Obstacle):
+    """Tabla de surf: alta y delgada."""
     def __init__(self, x):
         # Surfboard: Tall, thin obstacle
         # Resized: 30x80 -> 60x120
@@ -289,6 +296,7 @@ class SurfboardObstacle(Obstacle):
         self.rect.x = int(self.x + self.padding_x)
 
 class DumbbellBoxObstacle(Obstacle):
+    """Caja de mancuernas: pesada y grande."""
     def __init__(self, x):
         # Box: Heavy, bit larger than cooler
         # Resized: 120x120
@@ -320,6 +328,7 @@ class DumbbellBoxObstacle(Obstacle):
         self.rect.x = int(self.x + self.padding_x)
 
 class BeachNetObstacle(Obstacle):
+    """Red de playa: está alta, así que HAY que agacharse."""
     def __init__(self, x):
         # Beach Net: Taller, suspended. Must crouch.
         width = 300
@@ -352,6 +361,7 @@ class BeachNetObstacle(Obstacle):
         self.rect.x = int(self.x + self.padding_x)
 
 class BarraLibreObstacle(Obstacle):
+    """Barra libre: igual que la red, obliga a agacharse."""
     def __init__(self, x):
         # Bar: Thin, suspended. Must crouch.
         # User defined size
