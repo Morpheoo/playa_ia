@@ -239,9 +239,22 @@ class Engine:
         # Global frame count for animation
         frame_count = int(self.distance_traveled) # Use distance as proxy for frames or pass actual frames
         
-        for dino in self.dinos:
-            if not getattr(dino, "dead", False):
-                dino.draw(screen, assets, frame_count)
+        # --- RENDERIZADO FANTASMA ---
+        # Si hay más de 50 agentes, no los dibujamos para evitar lag
+        MAX_VISIBLE_DINOS = 50
+        
+        if len(self.dinos) <= MAX_VISIBLE_DINOS:
+            # Modo normal: dibujar todos los agentes
+            for dino in self.dinos:
+                if not getattr(dino, "dead", False):
+                    dino.draw(screen, assets, frame_count)
+        else:
+            # Modo fantasma: solo dibujar 3 agentes de referencia (sin mensaje)
+            drawn = 0
+            for dino in self.dinos:
+                if not getattr(dino, "dead", False) and drawn < 3:
+                    dino.draw(screen, assets, frame_count)
+                    drawn += 1
 
         # Si activamos el modo depuración, vemos las cajas de colisión (hitboxes)
         if debug_mode:
@@ -261,3 +274,4 @@ class Engine:
                 if not getattr(dino, "dead", False):
                     # Green for dino
                     pygame.draw.rect(screen, (0, 255, 0), dino.rect, 2)
+

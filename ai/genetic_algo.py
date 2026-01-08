@@ -5,8 +5,16 @@
 import random
 import copy
 import numpy as np
+import pickle
+import os
+import glob
 from .brain import Genome
 from config import *
+
+# Carpeta donde guardamos a los campeones
+GENOMES_DIR = "saved_genomes"
+# Archivo legacy (para compatibilidad con guardados anteriores)
+BEST_GENOME_FILE = "best_genome.pkl"
 
 class GeneticAlgorithm:
     def __init__(self):
@@ -54,6 +62,13 @@ class GeneticAlgorithm:
         # Guardamos el progreso para la gráfica
         self.history.append({"gen": self.generation, "best": self.best_fitness, "avg": self.avg_fitness})
         
+        # --- OPTIMIZACIÓN: Limitar el historial para evitar lag en sesiones largas ---
+        # Mantenemos solo las últimas 100 generaciones para que no se acumule memoria
+        MAX_HISTORY = 100
+        if len(self.history) > MAX_HISTORY:
+            self.history = self.history[-MAX_HISTORY:]
+
+        
         new_population = []
         
         # Si elegimos modo DYNAMIC y la IA no mejora, subimos la mutación para que "arriesgue" más
@@ -62,9 +77,18 @@ class GeneticAlgorithm:
              eff_mutation = min(0.5, self.mutation_rate + 0.2)
         
         # 1. Selección y Elitismo (Los campeones pasan directito)
+        # Estrategias:
+        # - HOF: Siempre pasa el mejor de TODOS los tiempos
+        # - GEN: Solo usa los mejores de ESTA generación (más diversidad)
+        # - DYNAMIC: Como HOF pero con mutación adaptativa
+        
         if self.strategy == "HOF":
              if self.global_best_genome:
                  new_population.append(copy.deepcopy(self.global_best_genome))
+        elif self.strategy == "GEN":
+             # No agregamos el mejor histórico, solo usamos los de esta ronda
+             # Esto permite más exploración y diversidad genética
+             pass
         elif self.strategy == "DYNAMIC" and self.stagnation_counter < 15:
              if self.global_best_genome:
                  new_population.append(copy.deepcopy(self.global_best_genome))
@@ -129,3 +153,169 @@ class GeneticAlgorithm:
                 self.population.append(Genome())
         elif len(self.population) > self.population_size:
             self.population = self.population[:self.population_size]
+
+    def save_best_genome(self, name=None):
+        """
+        Guarda el mejor genoma de todos los tiempos en la carpeta de campeones.
+        El nombre incluye el fitness para fácil identificación.
+        """
+        if self.global_best_genome is None:
+            return False, "No hay ningún genoma campeón para guardar todavía."
+        
+        # Crear carpeta si no existe
+        if not os.path.exists(GENOMES_DIR):
+            os.makedirs(GENOMES_DIR)
+        
+        try:
+            # Generar nombre automático con fitness si no se proporciona
+            if name is None:
+                name = f"campeon_{int(self.global_best_fitness)}pts"
+            
+            filepath = os.path.join(GENOMES_DIR, f"{name}.pkl")
+            
+            data = {
+                "genome": {
+                    "w1": self.global_best_genome.w1,
+                    "b1": self.global_best_genome.b1,
+                    "w2": self.global_best_genome.w2,
+                    "b2": self.global_best_genome.b2,
+                },
+                "fitness": self.global_best_fitness,
+                "generation": self.generation,
+                "name": name
+            }
+            with open(filepath, "wb") as f:
+                pickle.dump(data, f)
+            return True, f"¡Campeón guardado! {name}"
+        except Exception as e:
+            return False, f"Error al guardar: {str(e)}"
+
+    def load_best_genome(self, filepath=None):
+        """
+        Carga un genoma campeón desde un archivo.
+        Lo pone como el mejor histórico y también lo mete a la población actual.
+        """
+        if filepath is None:
+            return False, "No se especificó archivo a cargar."
+            
+        if not os.path.exists(filepath):
+            return False, "El archivo no existe."
+        
+        try:
+            with open(filepath, "rb") as f:
+                data = pickle.load(f)
+            
+            # Recreamos el genoma desde los datos guardados
+            loaded_genome = Genome(
+                w1=data["genome"]["w1"],
+                b1=data["genome"]["b1"],
+                w2=data["genome"]["w2"],
+                b2=data["genome"]["b2"]
+            )
+            
+            # Lo ponemos como el mejor histórico
+            self.global_best_genome = loaded_genome
+            self.global_best_fitness = data["fitness"]
+            
+            # También lo metemos a la población actual para que compita
+            if len(self.population) > 0:
+                self.population[0] = copy.deepcopy(loaded_genome)
+            
+            name = data.get("name", "desconocido")
+            return True, f"¡Campeón '{name}' cargado! Fitness: {int(data['fitness'])}"
+        except Exception as e:
+            return False, f"Error al cargar: {str(e)}"
+
+    def list_saved_genomes(self):
+        """
+        Lista todos los genomas guardados en la carpeta.
+        Retorna lista de tuplas: (nombre_display, filepath, fitness)
+        """
+        saved = []
+        
+        # Buscar en la nueva carpeta
+        if os.path.exists(GENOMES_DIR):
+            for filepath in glob.glob(os.path.join(GENOMES_DIR, "*.pkl")):
+                try:
+                    with open(filepath, "rb") as f:
+                        data = pickle.load(f)
+                    name = data.get("name", os.path.basename(filepath))
+                    fitness = data.get("fitness", 0)
+                    saved.append((f"🏆 {name} ({int(fitness)} pts)", filepath, fitness))
+                except:
+                    pass
+        
+        # Buscar archivo legacy (best_genome.pkl en raíz)
+        if os.path.exists(BEST_GENOME_FILE):
+            try:
+                with open(BEST_GENOME_FILE, "rb") as f:
+                    data = pickle.load(f)
+                fitness = data.get("fitness", 0)
+                saved.append((f"📁 Legacy ({int(fitness)} pts)", BEST_GENOME_FILE, fitness))
+            except:
+                pass
+        
+        # Ordenar por fitness (mayor primero)
+        saved.sort(key=lambda x: x[2], reverse=True)
+        
+        return saved
+
+    def has_saved_genome(self):
+        """Revisa si ya existe algún campeón guardado."""
+        return len(self.list_saved_genomes()) > 0
+    
+    def get_saved_fitness(self):
+        """Obtiene el fitness del mejor campeón guardado."""
+        saved = self.list_saved_genomes()
+        if saved:
+            return saved[0][2]  # El primer elemento (mayor fitness)
+        return None
+
+    def rename_genome(self, old_filepath, new_name):
+        """
+        Renombra un genoma guardado.
+        Actualiza tanto el nombre en el archivo como el nombre del archivo.
+        """
+        if not os.path.exists(old_filepath):
+            return False, "El archivo no existe."
+        
+        try:
+            # Cargar datos existentes
+            with open(old_filepath, "rb") as f:
+                data = pickle.load(f)
+            
+            # Actualizar el nombre interno
+            data["name"] = new_name
+            
+            # Crear nuevo filepath
+            new_filepath = os.path.join(GENOMES_DIR, f"{new_name}.pkl")
+            
+            # Guardar con nuevo nombre
+            with open(new_filepath, "wb") as f:
+                pickle.dump(data, f)
+            
+            # Eliminar archivo viejo si es diferente
+            if old_filepath != new_filepath and os.path.exists(old_filepath):
+                os.remove(old_filepath)
+            
+            return True, f"Renombrado a '{new_name}'"
+        except Exception as e:
+            return False, f"Error al renombrar: {str(e)}"
+
+    def delete_genome(self, filepath):
+        """
+        Elimina un genoma guardado.
+        """
+        if not os.path.exists(filepath):
+            return False, "El archivo no existe."
+        
+        try:
+            # Obtener nombre para el mensaje
+            with open(filepath, "rb") as f:
+                data = pickle.load(f)
+            name = data.get("name", os.path.basename(filepath))
+            
+            os.remove(filepath)
+            return True, f"'{name}' eliminado"
+        except Exception as e:
+            return False, f"Error al eliminar: {str(e)}"

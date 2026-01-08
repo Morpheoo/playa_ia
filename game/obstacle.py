@@ -90,15 +90,22 @@ class CarObstacle(Obstacle):
         if self.x < -self.width:
             self.removed = True
             
-        # El techo es seguro (safe roof)
-        self.safe_top_pct = 0.3
+        # --- AJUSTE DE HITBOX: Hacerlo más pequeño para que la IA aprenda a saltarlo ---
+        # Antes el techo seguro era 30%, ahora es 45% (casi la mitad del coche es caminable)
+        self.safe_top_pct = 0.45
         self.roof_offset = int(self.height * self.safe_top_pct)
         
-        # El hitbox mortal solo está en la parte de abajo del coche
-        padding_x = 65
+        # Aumentamos el padding horizontal para que el hitbox solo cubra el "centro" del coche
+        # Antes: 65px. Ahora: 85px (el coche tiene ~280px de ancho, así queda ~110px de hitbox)
+        padding_x = 85
         
-        # Rect(x, y, w, h)
-        self.rect = pygame.Rect(self.x + padding_x, self.y + self.roof_offset, self.width - (2 * padding_x), self.height - self.roof_offset)
+        # Añadimos un poco de padding desde abajo también para que no te mate rozar las llantas
+        padding_bottom = 20
+        hitbox_height = self.height - self.roof_offset - padding_bottom
+        
+        self.rect = pygame.Rect(self.x + padding_x, self.y + self.roof_offset, 
+                               self.width - (2 * padding_x), max(10, hitbox_height))
+
 
 class Drone(Obstacle):
     """Drones: vuelan a diferentes alturas y flotan arriba y abajo."""

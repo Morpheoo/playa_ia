@@ -120,10 +120,10 @@ if 'assets' not in st.session_state or not st.session_state.assets:
 
 # --- BARRA LATERAL (Los controles para el usuario) ---
 st.sidebar.header("Parámetros de Entrenamiento")
-pop_size = st.sidebar.slider("Población", 10, 100, POPULATION_SIZE, step=10)
+pop_size = st.sidebar.slider("Población", 10, 1000, POPULATION_SIZE, step=10)
 mutation_rate = st.sidebar.slider("Tasa de Mutación", 0.0, 1.0, MUTATION_RATE, 0.01)
 selection_ratio = st.sidebar.slider("Proporción de Selección", 0.01, 0.5, SELECTION_RATIO, 0.01)
-elitism = st.sidebar.slider("Elitismo", 0, 50, ELITISM_COUNT, 1)
+elitism = st.sidebar.slider("Elitismo", 0, 200, ELITISM_COUNT, 1)
 
 st.sidebar.header("Parámetros del Juego")
 speed_init = st.sidebar.slider("Velocidad Inicial", 2.0, 15.0, float(INITIAL_GAME_SPEED), 0.5)
@@ -155,6 +155,132 @@ if st.session_state.ga.stagnation_counter > 5:
     st.sidebar.warning(f"⚠️ Estancamiento detectado ({st.session_state.ga.stagnation_counter} rds)")
     if st.session_state.ga.strategy == "DYNAMIC":
          st.sidebar.info("🚀 Aplicando mutación aumentada y sangre nueva...")
+
+# --- GUARDAR/CARGAR CAMPEÓN ---
+st.sidebar.markdown("---")
+st.sidebar.header("💾 Guardar/Cargar Campeón")
+
+# Verificar si el objeto GA tiene los nuevos métodos (por si hay una sesión vieja)
+if not hasattr(st.session_state.ga, 'list_saved_genomes'):
+    st.sidebar.warning("⚠️ Sesión vieja detectada. Usa el botón de emergencia:")
+    
+    # BOTÓN DE EMERGENCIA - Guarda directamente con pickle
+    if st.sidebar.button("🚨 GUARDAR DE EMERGENCIA", type="primary"):
+        import pickle
+        import os
+        ga = st.session_state.ga
+        if ga.global_best_genome is not None:
+            try:
+                # Crear carpeta si no existe
+                if not os.path.exists("saved_genomes"):
+                    os.makedirs("saved_genomes")
+                    
+                name = f"campeon_{int(ga.global_best_fitness)}pts"
+                data = {
+                    "genome": {
+                        "w1": ga.global_best_genome.w1,
+                        "b1": ga.global_best_genome.b1,
+                        "w2": ga.global_best_genome.w2,
+                        "b2": ga.global_best_genome.b2,
+                    },
+                    "fitness": ga.global_best_fitness,
+                    "generation": ga.generation,
+                    "name": name
+                }
+                filepath = os.path.join("saved_genomes", f"{name}.pkl")
+                with open(filepath, "wb") as f:
+                    pickle.dump(data, f)
+                st.sidebar.success(f"✅ ¡GUARDADO! {name}")
+                st.sidebar.info("Ahora puedes hacer 'Reset All' sin perder tu campeón.")
+            except Exception as e:
+                st.sidebar.error(f"Error: {str(e)}")
+        else:
+            st.sidebar.warning("No hay ningún campeón para guardar todavía.")
+else:
+    # === VERSIÓN NUEVA CON SELECTOR ===
+    
+    # Botón para guardar el campeón actual
+    if st.sidebar.button("💾 Guardar Campeón Actual", help="Guarda el mejor genoma de esta sesión"):
+        success, msg = st.session_state.ga.save_best_genome()
+        if success:
+            st.sidebar.success(msg)
+        else:
+            st.sidebar.warning(msg)
+    
+    # Lista de campeones guardados
+    saved_genomes = st.session_state.ga.list_saved_genomes()
+    
+    # Preparar opciones para el selector
+    options = ["❌ Ninguno (empezar de cero)"]
+    genome_map = {options[0]: None}  # Mapa de opción -> filepath
+    
+    for display_name, filepath, fitness in saved_genomes:
+        options.append(display_name)
+        genome_map[display_name] = filepath
+    
+    # Selector de campeón
+    selected = st.sidebar.selectbox(
+        "Seleccionar Campeón Inicial",
+        options=options,
+        help="Elige un campeón guardado para cargar al inicio"
+    )
+    
+    # Botón para aplicar la selección
+    if st.sidebar.button("✅ Aplicar Campeón", type="primary"):
+        filepath = genome_map.get(selected)
+        if filepath is None:
+            # Opción "Ninguno" - resetear a genoma aleatorio
+            st.session_state.ga.global_best_genome = None
+            st.session_state.ga.global_best_fitness = 0
+            st.sidebar.info("🔄 Se empezará de cero con genes aleatorios.")
+            st.session_state.generation_complete = True
+        else:
+            # Cargar el genoma seleccionado
+            success, msg = st.session_state.ga.load_best_genome(filepath)
+            if success:
+                st.sidebar.success(msg)
+                st.session_state.generation_complete = True
+            else:
+                st.sidebar.error(msg)
+    
+    # Mostrar info del campeón actual en memoria
+    if st.session_state.ga.global_best_genome is not None:
+        st.sidebar.info(f"🧠 En memoria: {int(st.session_state.ga.global_best_fitness)} pts")
+    
+    # --- GESTIÓN DE GENOMAS (Renombrar/Eliminar) ---
+    if saved_genomes and hasattr(st.session_state.ga, 'rename_genome'):
+        with st.sidebar.expander("⚙️ Gestionar Genomas"):
+            # Selector de genoma a gestionar
+            manage_options = [f"{name}" for name, fp, fit in saved_genomes]
+            manage_map = {f"{name}": fp for name, fp, fit in saved_genomes}
+            
+            selected_manage = st.selectbox("Seleccionar genoma:", manage_options, key="manage_genome")
+            selected_filepath = manage_map.get(selected_manage)
+            
+            # Campo de texto para nuevo nombre
+            new_name = st.text_input("Nuevo nombre:", key="new_genome_name", 
+                                     placeholder="Ej: campeon_saltarin")
+            
+            col_rename, col_delete = st.columns(2)
+            
+            with col_rename:
+                if st.button("✏️ Renombrar"):
+                    if new_name.strip():
+                        success, msg = st.session_state.ga.rename_genome(selected_filepath, new_name.strip())
+                        if success:
+                            st.success(msg)
+                        else:
+                            st.error(msg)
+                    else:
+                        st.warning("Escribe un nombre")
+            
+            with col_delete:
+                if st.button("🗑️ Eliminar", type="secondary"):
+                    success, msg = st.session_state.ga.delete_genome(selected_filepath)
+                    if success:
+                        st.success(msg)
+                    else:
+                        st.error(msg)
 
 if manual_mode and keyboard is None:
     st.sidebar.error("Librería 'keyboard' no instalada. Ejecuta: pip install keyboard")
@@ -312,15 +438,17 @@ if st.session_state.running:
                     # distanceX = (ox - (px + pw))
                     # We assume dino is at PLAYER_X. ox is obs.x (left edge).
                     # Dino width is PLAYER_WIDTH (approx).
-                    dist_raw = obs.x - (PLAYER_X + PLAYER_WIDTH)
+                    # IMPORTANTE: Usamos obs.rect (hitbox) en lugar de obs.x/y/width/height (visual)
+                    # Esto hace que la IA "vea" el peligro real, no la imagen
+                    dist_raw = obs.rect.x - (PLAYER_X + PLAYER_WIDTH)
                     dist_x = max(0, dist_raw)
-                    obs_y = obs.y
-                    obs_w = obs.width
-                    obs_h = obs.height
+                    obs_y = obs.rect.y        # Posición Y del HITBOX (donde realmente te mata)
+                    obs_w = obs.rect.width    # Ancho del HITBOX
+                    obs_h = obs.rect.height   # Alto del HITBOX
                 else:
                     # Null obstacle
                     dist_x = WORLD_W # Max distance
-                    obs_y = 0
+                    obs_y = GROUND_Y # En el suelo
                     obs_w = 0
                     obs_h = 0
 
@@ -430,13 +558,20 @@ if st.session_state.running:
                     df = pd.DataFrame(st.session_state.ga.history)
                     chart_placeholder.line_chart(df.set_index("gen"))
                 
+                # --- OPTIMIZACIÓN: Limpiamos cachés de sprites viejos ---
+                # Los dinos de la generación anterior tenían sprites en memoria
+                # que ya no necesitamos. Esto evita fugas de memoria.
+                for old_dino in st.session_state.engine.dinos:
+                    if hasattr(old_dino, "_sprite_cache"):
+                        old_dino._sprite_cache.clear()
+                
                 # Reseteamos el juego con la nueva población
                 genomes = st.session_state.ga.population
                 st.session_state.engine.reset(num_dinos=len(genomes))
                 st.session_state.networks = [NeuralNetwork(g) for g in genomes]
                 
-                # Optional: Update Graph
                 best_genome = st.session_state.ga.population[0]
+
                 
                 # Dibujamos el cerebro (Red Neuronal) del mejor de esta ronda (Layered MLP Visualization)
                 best_genome = st.session_state.ga.population[0]

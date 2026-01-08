@@ -22,7 +22,7 @@ CROUCH_HEIGHT = 60 # Altura cuando se agacha (para esquivar drones)
 
 # Obstáculos y dificultad
 INITIAL_GAME_SPEED = 5 # Empezamos lentito
-SPEED_INCREMENT = 0.001 # Va subiendo la velocidad poco a poco para que sea difícil
+SPEED_INCREMENT = 0.003 # Va subiendo la velocidad poco a poco para que sea difícil (aumentado de 0.001)
 BIRD_PROBABILITY = 0.1 # Probabilidad de que aparezca un dron
 MIN_SPAWN_DIST = 400 # Distancia mínima entre obstáculos
 MAX_SPAWN_DIST = 800 # Distancia máxima para que no sea imposible
